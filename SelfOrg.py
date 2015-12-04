@@ -22,7 +22,7 @@ class Cell:
 
 class CAmodel:
     def __init__(self, M,n,steps):
-        self.Grid = np.asmatrix(self.initializeGrid(M,n))
+        self.Grid = self.initializeGrid(M,n)
         self.steps = steps
         self.n = n
 
