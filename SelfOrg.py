@@ -2,11 +2,9 @@
 
 import random as random
 import numpy as np
-<<<<<<< HEAD
 import math
-=======
 import matplotlib.pyplot as plt
->>>>>>> 09d11b6cb9075bed3e81c9aa7f8efdda430605ed
+
 
 class Cell:
     """Store the information about species in cell"""
