@@ -5,7 +5,7 @@ import numpy as np
 
 class Cell:
     """Store the information about species in cell"""
-    
+
     def __init__(self, Level="", State="" ):
         """Initialize a new cell object
 
@@ -22,9 +22,11 @@ class Cell:
 
 class CAmodel:
     def __init__(self, M,n,steps):
-        self.Grid = self.initializeGrid(M,n)
         self.steps = steps
         self.n = n
+        self.M = M
+        self.Grid = self.initializeGrid(M,n)
+        self.Grid = self.reorderGrid(self.Grid)
 
     # done
     def initializeGrid(self,M,n):
@@ -38,6 +40,30 @@ class CAmodel:
                 row.append(Cell(self.startLevel(M),self.startState()))
             Grid.append(row)
         return Grid
+
+    def reorderGrid(self, Grid):
+        numbers = []
+        for i in range(self.M):
+            numbers.append([i,0])
+        for row in Grid:
+            for cell in row:
+                numbers[cell.Level-1][1] += 1
+        numbers = sorted(numbers,key=lambda x:x[1],reverse=True)
+        print(numbers)
+
+        new_Grid = []
+        for row in Grid:
+            new_row = []
+            for cell in row:
+                for i in range(len(numbers)):
+                    if numbers[i][0] == cell.Level-1:
+                        new_row.append(Cell(i+1, cell.State))
+                        break
+                else:
+                    print "error"
+            new_Grid.append(new_row)
+        return new_Grid
+
 
     # done, completely random atm
     def startLevel(self,M):
