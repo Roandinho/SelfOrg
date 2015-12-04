@@ -56,7 +56,7 @@ class CAmodel:
             numbers.append([i,0])
         for row in Grid:
             for cell in row:
-                numbers[cell.Level-1][1] += 1
+                numbers[cell.Level][1] += 1
         numbers = sorted(numbers,key=lambda x:x[1],reverse=True)
 
         new_Grid = []
@@ -64,8 +64,8 @@ class CAmodel:
             new_row = []
             for cell in row:
                 for i in range(len(numbers)):
-                    if numbers[i][0] == cell.Level-1:
-                        new_row.append(Cell(i+1, cell.State))
+                    if numbers[i][0] == cell.Level:
+                        new_row.append(Cell(i, cell.State))
                         break
                 else:
                     print "error"
@@ -187,3 +187,4 @@ steps = 3 # number of steps
 model = CAmodel(M,n,steps)
 model.printMatrix()
 model.run()
+print model.cmplxt
