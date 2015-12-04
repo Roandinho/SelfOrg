@@ -63,10 +63,44 @@ class CAmodel:
     # to do
     def updateCell(self,i,j):
         """Gets the coordinates and returns the new level and State"""
-        num_pred,num_prey = self.getNums(i,j)
-        # case1
-        if num_pred<num_prey and num_prey>0:
-            return self.Grid[i][j].Level,True
+        num_pred,num_prey, num_nb = self.getNums(i,j)
+        # case 1 number of preys > predator
+        if num_prey>num_pred:
+            if self.Grid[i][j].State:
+                # if the cell is alive, keep it alive
+                return self.Grid[i][j].Level,True
+            else:
+                # if the cell is dead, return to life
+                return self.Grid[i][j].Level,True
+
+        #case 2 number of predators > prey
+        elif num_pred>num_prey:
+            #the cell dies
+            return self.Grid[i][j].Level,False
+        #case3, no predators or preys apply Conway's rules
+        elif num_pred == 0 and  num_prey == 0:
+            if self.Grid[i][j].State:
+                # the cell was alive
+                if num_nb == 2 or num_nb == 3:
+                    # the cell stays alive when it has 2 or 3 living neighbors
+                    return self.Grid[i][j].Level,True
+                else:
+                    # the cell dies otherwise
+                    return self.Grid[i][j].Level,False
+            else:
+                # the cell was dead
+                if num_nb == 3:
+                    # return to life if it has 3 neighbors
+                    return self.Grid[i][j].Level,True
+                else:
+                    # keep dead
+                    return self.Grid[i][j].Level,False
+        #case4, predators are in the same number as preys
+        elif num_pred == num_prey:
+            # do not change state
+           return self.Grid[i][j].Level,self.Grid[i][j].State
+    
+        
 
     # to do
     def getNums(self,i,j):
