@@ -47,7 +47,7 @@ class CAmodel:
     # done, completely random atm
     def startState(self):
         """Returns True or False indicating dead or alive, randomly"""
-        return bool(random.getrandbits(1))
+        return True#bool(random.getrandbits(1))
 
     # done
     def updateGrid(self):
@@ -68,11 +68,19 @@ class CAmodel:
         if num_pred<num_prey and num_prey>0:
             return self.Grid[i][j].Level,True
 
-    # to do
+    # done
     def getNums(self,i,j):
         """Gets the coordinates and returns the number of preds and preys in neighbrhd"""
         nb = self.getNeighbors(i,j)
-        return 1,2
+        act_level = self.Grid[i][j].Level
+        num_prey = 0
+        num_pred = 0
+        for k in nb:
+            if k.Level == (act_level + 1) and k.State == True:
+                num_pred += 1
+            elif k.Level == (act_level -1) and k.State == True:
+                num_prey += 1
+        return num_pred,num_prey
 
     # done
     def getNeighbors(self,i,j):
