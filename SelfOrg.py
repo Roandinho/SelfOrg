@@ -85,7 +85,6 @@ class CAmodel:
                 num_prey += 1
             if k.State == True:
                 num_alive += True
-        print num_pred,num_prey,num_alive
         return num_pred,num_prey,num_alive
 
     # done
