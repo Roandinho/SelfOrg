@@ -134,8 +134,6 @@ class CAmodel:
         elif num_pred == num_prey:
             # do not change state
            return self.Grid[i][j].Level,self.Grid[i][j].State
-    
-        
 
     # done
     def getNums(self,i,j):
@@ -204,6 +202,15 @@ class CAmodel:
         cbar.ax.set_yticklabels([0, self.M/2, self.M])  # vertically oriented colorbar
         plt.show()
 
+    def printEntropy(self):
+        y = []
+        for i in range(1,self.steps):
+            y.append(i)
+        plt.plot(y,model.cmplxt[1:])
+        plt.show()
+
+
+
 
     # done
     def run(self):
@@ -212,11 +219,11 @@ class CAmodel:
         print "model run completed"
 
 
-M = 8 # number of interacting species
+M = 256 # number of interacting species
 n = 100 # dimensions of (square) 2-D lattice
-steps = 3 # number of steps
+steps = 10 # number of steps
 
 model = CAmodel(M,n,steps)
-model.printMatrix()
+#model.printMatrix()
 model.run()
-print model.cmplxt
+model.printEntropy()
