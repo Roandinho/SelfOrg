@@ -2,6 +2,7 @@
 
 import random as random
 import numpy as np
+import math
 
 class Cell:
     """Store the information about species in cell"""
@@ -25,6 +26,8 @@ class CAmodel:
         self.Grid = self.initializeGrid(M,n)
         self.steps = steps
         self.n = n
+        self.M = M
+        self.cmplxt = []
 
     # done
     def initializeGrid(self,M,n):
@@ -42,7 +45,7 @@ class CAmodel:
     # done, completely random atm
     def startLevel(self,M):
         """Returns a completely random level (int) to start at"""
-        return random.randint(1,M)
+        return random.randint(0,M-1)
 
     # done, completely random atm
     def startState(self):
@@ -52,6 +55,7 @@ class CAmodel:
     # done
     def updateGrid(self):
         """calculate next step for every cell, and save in self.Grid"""
+        self.cmplxt.append(self.getComplexity())
         new_grid = self.Grid
         for i in range(n):
             for j in range(n):
@@ -98,6 +102,29 @@ class CAmodel:
                 else:
                     nb.append(self.Grid[(i+k)%n][(j+l)%n])
         return nb
+
+    # working on it
+    def getComplexity(self):
+        p_i = np.zeros((self.M,1))
+        n = self.n
+
+        # loop over all cells to determine probabilities
+        for i in range(n):
+            for j in range(n):
+                k = self.Grid[i][j]
+                # if cell is alive, update corresp. probability
+                if k.State == True:
+                    p_i[k.Level] += 1./(n**2)
+
+        # calculate entropy
+        S = 0.
+        for p in p_i:
+            try:
+                S += (p*math.log(p))[0]
+            except ValueError:
+                pass
+        S = -1.*S
+        return S
 
     # done
     def run(self):
