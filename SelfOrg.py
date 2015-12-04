@@ -63,10 +63,12 @@ class CAmodel:
     # to do
     def updateCell(self,i,j):
         """Gets the coordinates and returns the new level and State"""
-        num_pred,num_prey = self.getNums(i,j)
+        num_pred,num_prey,num_alive = self.getNums(i,j)
         # case1
         if num_pred<num_prey and num_prey>0:
             return self.Grid[i][j].Level,True
+        else:
+            return self.Grid[i][j].Level,False
 
     # done
     def getNums(self,i,j):
@@ -75,12 +77,16 @@ class CAmodel:
         act_level = self.Grid[i][j].Level
         num_prey = 0
         num_pred = 0
+        num_alive = 0
         for k in nb:
             if k.Level == (act_level + 1) and k.State == True:
                 num_pred += 1
             elif k.Level == (act_level -1) and k.State == True:
                 num_prey += 1
-        return num_pred,num_prey
+            if k.State == True:
+                num_alive += True
+        print num_pred,num_prey,num_alive
+        return num_pred,num_prey,num_alive
 
     # done
     def getNeighbors(self,i,j):
