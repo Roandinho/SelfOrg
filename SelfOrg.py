@@ -30,7 +30,7 @@ class Cell:
             if cell.Level == (self.Level + 1):
                 self.preds.append(cell)
             elif cell.Level == (self.Level - 1):
-                self.preds.append(cell)
+                self.preys.append(cell) # changed preds to preys, right??
             else:
                 self.rest.append(cell)
 
@@ -58,7 +58,12 @@ class Cell:
                 return
         self.nextState = True
 
-    def updateStep(self):
+    def updateStep(self, forcedExtinct):
+        # if cell is forced to extinct, do this at first
+        if self.State in forcedExtinct:
+            self.nextState = False
+            return
+
         # a large portion of the cells do not have pred or prey neighbours, do
         # conway immediately
         if len(self.preds) + len(self.preys) == 0:
@@ -99,13 +104,18 @@ class Cell:
 class CAmodel:
     Grid = None
 
-    def __init__(self, M, n, steps):
+    def __init__(self, M, n, steps, extProbs):
+        # store variables
         self.steps = steps
         self.n = n
         self.M = M
+        self.extProbs = extProbs
 
+        # variables that are needed for statistics
         self.cmplxt = []
+        self.numExtinct = []
 
+        # create grid
         CAmodel.Grid = self.initializeGrid(M, n)
         CAmodel.Grid = self.reorderGrid(self.Grid)
         self.setCellNeighbours()
@@ -169,15 +179,40 @@ class CAmodel:
 
     # done
     def updateGrid(self):
+
+        # keep track of those species who are alive at this timestep
+        alive = dict()
+
+        # calculate if species is forced to extinct
+        forcedExtinct = self.calcForced()
         for row in CAmodel.Grid:
             for cell in row:
-                cell.updateStep()
+                cell.updateStep(forcedExtinct)
         for row in CAmodel.Grid:
             for cell in row:
                 cell.State = cell.nextState
-        self.cmplxt.append(self.getComplexity())
+                # check for extinction
+                if cell.State:
+                    alive[cell.Level] = 1
 
-    # working on it
+        # update statistics
+        self.cmplxt.append(self.getComplexity())
+        self.numExtinct.append(self.M - len(alive))
+
+
+    # done
+    def calcForced(self):
+        """calculates (at each timestep) which species are forced to die out
+        the function is written in such a way, that extinction is not
+        necessarily irreversible"""
+        forcedExtinct = []
+        probs = self.extProbs
+        for p in probs:
+            if probs[p] > random.random():
+                forcedExtinct.append(p)
+        return forcedExtinct
+
+    # done
     def getComplexity(self):
         p_i = [0]*self.M
         # loop over all cells to determine probabilities
@@ -212,6 +247,20 @@ class CAmodel:
         cbar.ax.set_yticklabels([0, self.M/2, self.M])
         plt.show()
 
+    def printEntireMatrix(self):
+        """prints Level plus +(Alive) or -(Dead) for each cell"""
+        TheString = ""
+        for row in self.Grid:
+            for cell in row:
+                TheString += str(cell.Level).zfill(3)
+                if cell.State:
+                    TheString += "+ "
+                else:
+                    TheString += "- "
+            TheString += "\n\n"
+        print TheString
+        return
+
     def printEntropy(self):
         y = []
         for i in range(1, self.steps):
@@ -229,11 +278,15 @@ class CAmodel:
 M = 256  # number of interacting species
 n = 100  # dimensions of (square) 2-D lattice
 steps = 1000  # number of steps
+extProbs = dict() # dictionary containing 
+extProbs[16] = 0.01
 
-model = CAmodel(M, n, steps)
+model = CAmodel(M, n, steps, extProbs)
 # model.printMatrix()
 model.run()
 # import cProfile
 #cProfile.run('model.run()', sort='tottime')
 #model.printEntropy()
-print model.cmplxt
+print model.cmplxt[1:-1:50]
+print model.numExtinct[1:-1:50]
+model.printEntireMatrix()
