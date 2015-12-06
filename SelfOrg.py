@@ -60,7 +60,7 @@ class Cell:
 
     def updateStep(self, forcedExtinct):
         # if cell is forced to extinct, do this at first
-        if self.State in forcedExtinct:
+        if self.Level in forcedExtinct:
             self.nextState = False
             return
 
@@ -197,7 +197,9 @@ class CAmodel:
 
         # update statistics
         self.cmplxt.append(self.getComplexity())
-        self.numExtinct.append(self.M - len(alive))
+        if self.steps % (self.steps/10) == 0:
+            totalExtinct = sum(self.numExtinct)
+            self.numExtinct.append((self.M - len(alive))-totalExtinct)
 
 
     # done
@@ -208,7 +210,8 @@ class CAmodel:
         forcedExtinct = []
         probs = self.extProbs
         for p in probs:
-            if probs[p] > random.random():
+            p_random = random.random()
+            if probs[p] > p_random:
                 forcedExtinct.append(p)
         return forcedExtinct
 
@@ -278,8 +281,9 @@ class CAmodel:
 M = 256  # number of interacting species
 n = 100  # dimensions of (square) 2-D lattice
 steps = 1000  # number of steps
-extProbs = dict() # dictionary containing 
+extProbs = dict() # dictionary containing extinction probablities
 extProbs[16] = 0.01
+extProbs[90] = 0.001
 
 model = CAmodel(M, n, steps, extProbs)
 # model.printMatrix()
@@ -289,4 +293,4 @@ model.run()
 #model.printEntropy()
 print model.cmplxt[1:-1:50]
 print model.numExtinct[1:-1:50]
-model.printEntireMatrix()
+# model.printEntireMatrix()
