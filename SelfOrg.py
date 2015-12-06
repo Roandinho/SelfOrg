@@ -97,6 +97,19 @@ class Cell:
         """Return string representation of a cell object"""
         return "Level %s (Alive: %s)" % (str(self.Level), str(self.State))
 
+    def printNeighbors(self):
+        print "For cell of level",self.Level,"and alive:",self.State
+        print "PREYS:"
+        for prey in self.preys:
+            print prey
+        print "PREDS:"
+        for pred in self.preds:
+            print pred
+        print "Rest:"
+        for rest in self.rest:
+            print rest
+
+
     def __float__(self):
         return float(self.Level)
 
@@ -112,8 +125,9 @@ class CAmodel:
         self.extProbs = extProbs
 
         # variables that are needed for statistics
-        self.cmplxt = []
-        self.numExtinct = []
+        self.cmplxt = [] # the complexity for all timestep
+        self.numExtinct = [] # the number of species that are extinct for multiple timesteps
+        self.percentageAlive = [] # the percentage of all cell's which are alive for every timestep
 
         # create grid
         CAmodel.Grid = self.initializeGrid(M, n)
@@ -178,27 +192,38 @@ class CAmodel:
         return bool(random.randint(0, 2))
 
     # done
-    def updateGrid(self):
+    def updateGrid(self, timestep):
 
         # keep track of those species who are alive at this timestep
         alive = dict()
 
         # calculate if species is forced to extinct
         forcedExtinct = self.calcForced()
+
+        # percentage alive
+        percAlive = 0
+
+        # UPDATE, i.e.: calc next grid and then copy into grid
         for row in CAmodel.Grid:
             for cell in row:
                 cell.updateStep(forcedExtinct)
+                if cell.State:
+                    percAlive += 1
         for row in CAmodel.Grid:
             for cell in row:
                 cell.State = cell.nextState
+
                 # check for extinction
                 if cell.State:
                     alive[cell.Level] = 1
 
         # update statistics
         self.cmplxt.append(self.getComplexity())
-        if self.steps % (self.steps/10) == 0:
+        self.percentageAlive.append((1.*percAlive)/self.n**2)
+
+        if timestep % (self.steps/10) == 0:
             totalExtinct = sum(self.numExtinct)
+            print timestep, (self.steps/10), self.steps % (self.steps/10), self.M, len(alive), (self.M - len(alive))
             self.numExtinct.append((self.M - len(alive))-totalExtinct)
 
 
@@ -274,7 +299,7 @@ class CAmodel:
     # done
     def run(self):
         for t in range(self.steps):
-            self.updateGrid()
+            self.updateGrid(t)
         print ("model run completed")
 
 
@@ -292,5 +317,6 @@ model.run()
 #cProfile.run('model.run()', sort='tottime')
 #model.printEntropy()
 print model.cmplxt[1:-1:50]
-print model.numExtinct[1:-1:50]
+print model.percentageAlive[1:-1:50]
+print model.numExtinct
 # model.printEntireMatrix()
