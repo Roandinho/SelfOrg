@@ -1,9 +1,8 @@
 #!/usr/bin/pypy
 
 import random as random
-# import numpy as np
 import math
-#import matplotlib.pyplot as plt
+plt = None
 
 
 class Cell:
@@ -30,7 +29,7 @@ class Cell:
             if cell.Level == (self.Level + 1):
                 self.preds.append(cell)
             elif cell.Level == (self.Level - 1):
-                self.preys.append(cell) # changed preds to preys, right??
+                self.preys.append(cell)  # changed preds to preys, right??
             else:
                 self.rest.append(cell)
 
@@ -92,42 +91,75 @@ class Cell:
         else:
             self.nextState = True
 
+    # nice way to store previous states
+    def __repr__(self):
+        return "%s%s" % (str(self.Level), str(int(self.State)))
+
     # this makes that you can do 'print cell':
     def __str__(self):
         """Return string representation of a cell object"""
         return "Level %s (Alive: %s)" % (str(self.Level), str(self.State))
 
     def printNeighbors(self):
-        print "For cell of level",self.Level,"and alive:",self.State
-        print "PREYS:"
+        print ("For cell of level", self.Level, "and alive:", self.State)
+        print ("PREYS:")
         for prey in self.preys:
-            print prey
-        print "PREDS:"
+            print (prey)
+        print ("PREDS:")
         for pred in self.preds:
-            print pred
-        print "Rest:"
+            print (pred)
+        print ("Rest:")
         for rest in self.rest:
-            print rest
-
+            print (rest)
 
     def __float__(self):
         return float(self.Level)
 
 
+class Grid(list):
+    def __repr__(self):
+        ret = ""
+        for row in self:
+            for cell in row:
+                ret += repr(cell)
+        return ret
+
+    def __hash__(self):
+        return hash(self.__repr__())
+
+    def __str__(self):
+        return self.__repr__()
+
+
+class ConvergedException(Exception):
+    pass
+
+
 class CAmodel:
     Grid = None
+    withExtinction = False
 
-    def __init__(self, M, n, steps, extProbs):
+    def __init__(self, M, n, steps, extProbs=None, perturbimpact=1):
         # store variables
+        self.calcConvergence = False
+        self.previousStates = dict()
+        self.perturbimpact = perturbimpact
+        self.avalanceLengths = []
         self.steps = steps
         self.n = n
         self.M = M
-        self.extProbs = extProbs
+        if extProbs:
+            self.extProbs = extProbs
+            self.withExtinction = True
 
         # variables that are needed for statistics
-        self.cmplxt = [] # the complexity for all timestep
-        self.numExtinct = [] # the number of species that are extinct for multiple timesteps
-        self.percentageAlive = [] # the percentage of all cell's which are alive for every timestep
+        self.cmplxt = []  # the complexity for all timestep
+        # the number of species that are extinct for multiple timesteps
+        self.numExtinct = []
+        # the percentage of all cell's which are alive for every timestep
+        self.percentageAlive = []
+        # the number of species alive for every timestep
+        self.nAlive = []
 
         # create grid
         CAmodel.Grid = self.initializeGrid(M, n)
@@ -138,25 +170,25 @@ class CAmodel:
         """Grid initizialed by funtions startLevel and startState
         Function takes the number of species M and dims of the
         2-D lattice (n by n)"""
-        Grid = []
+        grid = Grid()
         for i in range(n):
             row = []
             for j in range(n):
                 row.append(Cell(self.startLevel(M), self.startState()))
-            Grid.append(row)
-        return Grid
+            grid.append(row)
+        return grid
 
-    def reorderGrid(self, Grid):
+    def reorderGrid(self, grid):
         numbers = []
         for i in range(self.M):
             numbers.append([i, 0])
-        for row in Grid:
+        for row in grid:
             for cell in row:
                 numbers[cell.Level][1] += 1
         numbers = sorted(numbers, key=lambda x: x[1], reverse=True)
 
-        new_Grid = []
-        for row in Grid:
+        new_Grid = Grid()
+        for row in grid:
             new_row = []
             for cell in row:
                 for i in range(len(numbers)):
@@ -181,24 +213,23 @@ class CAmodel:
                      CAmodel.Grid[(i - 1) % n][(j) % n],
                      CAmodel.Grid[(i - 1) % n][(j + 1) % n]])
 
-    # done, completely random atm
     def startLevel(self, M):
         """Returns a completely random level (int) to start at"""
         return random.randint(0, M-1)
 
-    # done, completely random atm
     def startState(self):
         """Returns True or False indicating dead or alive, randomly"""
         return bool(random.randint(0, 2))
 
-    # done
     def updateGrid(self, timestep):
 
         # keep track of those species who are alive at this timestep
-        alive = dict()
+        alive = [0]*self.M
 
         # calculate if species is forced to extinct
-        forcedExtinct = self.calcForced()
+        forcedExtinct = []
+        if self.withExtinction:
+            forcedExtinct = self.calcForced()
 
         # percentage alive
         percAlive = 0
@@ -209,6 +240,7 @@ class CAmodel:
                 cell.updateStep(forcedExtinct)
                 if cell.State:
                     percAlive += 1
+
         for row in CAmodel.Grid:
             for cell in row:
                 cell.State = cell.nextState
@@ -217,17 +249,26 @@ class CAmodel:
                 if cell.State:
                     alive[cell.Level] = 1
 
+        #todo, append after update statistics?
+        if self.calcConvergence:
+            st = str(CAmodel.Grid)
+            try:
+                self.previousStates[st]
+            except:
+                self.previousStates[st] = 1
+            else:
+                raise ConvergedException()
         # update statistics
         self.cmplxt.append(self.getComplexity())
         self.percentageAlive.append((1.*percAlive)/self.n**2)
+        self.nAlive.append(sum(alive))
 
-        if timestep % (self.steps/10) == 0:
-            totalExtinct = sum(self.numExtinct)
-            print timestep, (self.steps/10), self.steps % (self.steps/10), self.M, len(alive), (self.M - len(alive))
-            self.numExtinct.append((self.M - len(alive))-totalExtinct)
+        # if timestep % (self.steps/10) == 0:
+        #    totalExtinct = sum(self.numExtinct)
+        #    print (timestep, (self.steps/10), self.steps % (self.steps/10),
+        #           self.M, len(alive), (self.M - len(alive)))
+        #    self.numExtinct.append((self.M - len(alive))-totalExtinct)
 
-
-    # done
     def calcForced(self):
         """calculates (at each timestep) which species are forced to die out
         the function is written in such a way, that extinction is not
@@ -240,7 +281,6 @@ class CAmodel:
                 forcedExtinct.append(p)
         return forcedExtinct
 
-    # done
     def getComplexity(self):
         p_i = [0]*self.M
         # loop over all cells to determine probabilities
@@ -290,33 +330,64 @@ class CAmodel:
         return
 
     def printEntropy(self):
-        y = []
-        for i in range(1, self.steps):
-            y.append(i)
-        plt.plot(y, model.cmplxt[1:])
-        plt.show()
+        import subprocess
+        with open("entropy.py", "w") as f:
+            f.write("import matplotlib.pyplot as plt\n" +
+                    "y = []\n" +
+                    "for i in range(1, " + str(len(self.cmplxt)) + "):\n " +
+                    "  y.append(i)\n" +
+                    "plt.plot(y, " + str(self.cmplxt[1:]) + ")\n" +
+                    "plt.show()")
+            subprocess.Popen(["python2", "entropy.py"])
 
-    # done
-    def run(self):
-        for t in range(self.steps):
-            self.updateGrid(t)
-        print ("model run completed")
+    def perturb(self):
+        for _ in range(self.perturbimpact):
+            i = random.randint(0, self.n-1)
+            j = random.randint(0, self.n-1)
+            #toggle/perturb
+            self.Grid[i][j].State = not self.Grid[i][j].State
+
+
+    def run(self, perturb=False):
+        if perturb:
+            self.calcConvergence=True
+            i = 0
+            j = 0
+            while True:
+                try:
+                    self.updateGrid(j)
+                except ConvergedException:
+                    self.perturb()
+                    self.previousStates=dict()
+                    i += 1
+                    self.avalanceLengths.append(j)
+                    j = 0
+                    continue
+                if i == self.steps:
+                    break
+                j += 1
+        else:
+            self.calcConvergence=False
+            for t in range(self.steps):
+                self.updateGrid(t)
+            print ("model run completed")
 
 
 M = 256  # number of interacting species
 n = 100  # dimensions of (square) 2-D lattice
-steps = 1000  # number of steps
-extProbs = dict() # dictionary containing extinction probablities
-extProbs[16] = 0.01
-extProbs[90] = 0.001
+steps = 100  # number of steps
+extProbs = dict()  # dictionary containing extinction probablities
+# extProbs[16] = 0.01
+# extProbs[90] = 0.001
 
-model = CAmodel(M, n, steps, extProbs)
+model = CAmodel(M, n, steps, extProbs=None, perturbimpact=10)
 # model.printMatrix()
-model.run()
+model.run(perturb=True)
 # import cProfile
-#cProfile.run('model.run()', sort='tottime')
-#model.printEntropy()
-print model.cmplxt[1:-1:50]
-print model.percentageAlive[1:-1:50]
-print model.numExtinct
+# cProfile.run('model.run()', sort='tottime')
+model.printEntropy()
+# print model.cmplxt[1:-1:50]
+# print model.percentageAlive[1:-1:50]
+# print model.numExtinct
+print model.avalanceLengths
 # model.printEntireMatrix()
