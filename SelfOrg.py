@@ -2,36 +2,50 @@
 
 import random as random
 import math
-plt = None
 
 
 class Cell:
     """Store the information about species in cell"""
 
-    def __init__(self, Level=0, State=True):
+    def __init__(self, model, Level=0, State=True):
         """Initialize a new cell object
 
         Level -- identifier of the species
         State -- indicating wheither alive (True) or dead (False)
         """
+        self.model = model
         self.Level = Level
         self.State = State
         self.nextState = State
-        self.Grid = None
         self.neighbours = None
         self.preys = []
         self.preds = []
         self.rest = []
 
-    def setNeighbours(self, cells):
-        self.neighbours = cells
-        for cell in cells:
-            if cell.Level == (self.Level + 1):
-                self.preds.append(cell)
-            elif cell.Level == (self.Level - 1):
-                self.preys.append(cell)  # changed preds to preys, right??
-            else:
-                self.rest.append(cell)
+    def setNeighbours(self, cells = None):
+        self.preys = []
+        self.preds = []
+        self.rest = []
+        if cells:
+            self.neighbours = cells
+        if self.model.hierarchy:
+            for cell in self.neighbours:
+                if cell.Level == self.Level + 1:
+                    self.preds.append(cell)
+                if cell.Level == self.Level - 1:
+                    self.preys.append(cell)
+                else:
+                    self.rest.append(cell)
+        else:
+            for cell in self.neighbours:
+                a = self.model.interactions[cell.Level][self.Level]
+                b = self.model.interactions[self.Level][cell.Level]
+                if a < 0 and b > 0:
+                    self.preys.append(cell)
+                if a > 0 and b < 0:
+                    self.preds.append(cell)
+                else:
+                    self.rest.append(cell)
 
     def doConway(self):
         n_alive = 0
@@ -112,17 +126,28 @@ class Cell:
         for rest in self.rest:
             print (rest)
 
-    def __float__(self):
-        return float(self.Level)
-
 
 class Grid(list):
+
+    _cells = None
+
     def __repr__(self):
         ret = ""
         for row in self:
             for cell in row:
                 ret += repr(cell)
         return ret
+
+    @property
+    def cells(self):
+        if self._cells:
+            return self._cells
+        else:
+            self._cells = []
+            for row in self:
+                for cell in row:
+                    self._cells.append(cell)
+            return self._cells
 
     def __hash__(self):
         return hash(self.__repr__())
@@ -133,18 +158,24 @@ class Grid(list):
 
 class ConvergedException(Exception):
     pass
+class AllDeadException(Exception):
+    pass
 
 
 class CAmodel:
-    Grid = None
-    withExtinction = False
 
-    def __init__(self, M, n, steps, extProbs=None, perturbimpact=1):
+    def __init__(self, M, n, steps, extProbs=None, perturbimpact=10,
+                 hierarchy=True, replaceExtinct=False, updateInteractions=False):
         # store variables
         self.calcConvergence = False
+        self.hierarchy = hierarchy
+        self.replaceExtinct = replaceExtinct
+        self.updateInteractions = updateInteractions
+        self.withExtinction = False
+        self.interactions = None
         self.previousStates = dict()
         self.perturbimpact = perturbimpact
-        self.avalanceLengths = []
+        self.dead = [0]*M
         self.steps = steps
         self.n = n
         self.M = M
@@ -160,12 +191,30 @@ class CAmodel:
         self.percentageAlive = []
         # the number of species alive for every timestep
         self.nAlive = []
+        # the length of a avalanche when it occurs
+        self.avalanceLengths = []
+        # the number of extinctions per timestep (when they occur)
+        self.extinctions = []
 
         # create grid
-        CAmodel.Grid = self.initializeGrid(M, n)
-        CAmodel.Grid = self.reorderGrid(self.Grid)
+        self.grid = self.initializeGrid(M, n)
+        self.grid = self.reorderGrid(self.grid)
+        self.interactions = self.setInteractions()
         self.setCellNeighbours()
 
+    def updateInteraction(self):
+        for row in self.interactions:
+            row[random.randint(0, len(row) -1)] = random.uniform(-1,1)
+
+    def setInteractions(self):
+        interactions = []
+        for _ in range(self.M):
+            row = []
+            for _ in range(self.M):
+                row.append(random.uniform(-1,1))
+            interactions.append(row)
+        return interactions
+                
     def initializeGrid(self, M, n):
         """Grid initizialed by funtions startLevel and startState
         Function takes the number of species M and dims of the
@@ -174,7 +223,7 @@ class CAmodel:
         for i in range(n):
             row = []
             for j in range(n):
-                row.append(Cell(self.startLevel(M), self.startState()))
+                row.append(Cell(self,self.startLevel(M), self.startState()))
             grid.append(row)
         return grid
 
@@ -193,7 +242,7 @@ class CAmodel:
             for cell in row:
                 for i in range(len(numbers)):
                     if numbers[i][0] == cell.Level:
-                        new_row.append(Cell(i, cell.State))
+                        new_row.append(Cell(self, i, cell.State))
                         break
                 else:
                     print ("error")
@@ -203,15 +252,15 @@ class CAmodel:
     def setCellNeighbours(self):
         for i in range(n):
             for j in range(n):
-                CAmodel.Grid[i][j].setNeighbours(
-                    [CAmodel.Grid[(i + 1) % n][(j - 1) % n],
-                     CAmodel.Grid[(i + 1) % n][(j) % n],
-                     CAmodel.Grid[(i + 1) % n][(j + 1) % n],
-                     CAmodel.Grid[(i) % n][(j - 1) % n],
-                     CAmodel.Grid[(i) % n][(j + 1) % n],
-                     CAmodel.Grid[(i - 1) % n][(j - 1) % n],
-                     CAmodel.Grid[(i - 1) % n][(j) % n],
-                     CAmodel.Grid[(i - 1) % n][(j + 1) % n]])
+                self.grid[i][j].setNeighbours(
+                    [self.grid[(i + 1) % n][(j - 1) % n],
+                     self.grid[(i + 1) % n][(j) % n],
+                     self.grid[(i + 1) % n][(j + 1) % n],
+                     self.grid[(i) % n][(j - 1) % n],
+                     self.grid[(i) % n][(j + 1) % n],
+                     self.grid[(i - 1) % n][(j - 1) % n],
+                     self.grid[(i - 1) % n][(j) % n],
+                     self.grid[(i - 1) % n][(j + 1) % n]])
 
     def startLevel(self, M):
         """Returns a completely random level (int) to start at"""
@@ -224,7 +273,7 @@ class CAmodel:
     def updateGrid(self, timestep):
 
         # keep track of those species who are alive at this timestep
-        alive = [0]*self.M
+        alive = self.dead[:]
 
         # calculate if species is forced to extinct
         forcedExtinct = []
@@ -235,30 +284,79 @@ class CAmodel:
         percAlive = 0
 
         # UPDATE, i.e.: calc next grid and then copy into grid
-        for row in CAmodel.Grid:
-            for cell in row:
-                cell.updateStep(forcedExtinct)
-                if cell.State:
-                    percAlive += 1
+        for cell in self.grid.cells:
+            cell.updateStep(forcedExtinct)
+            if cell.State:
+                percAlive += 1
 
-        for row in CAmodel.Grid:
-            for cell in row:
-                cell.State = cell.nextState
+        # Keep track of the size of a avalance
+        if self.calcConvergence:
+            temp = []
+            for i in range(len(self.not_avalanched)):
+                if self.not_avalanched[i].State == self.not_avalanched[i].nextState:
+                    temp.append(self.not_avalanched[i])
+            self.not_avalanched = temp
 
-                # check for extinction
-                if cell.State:
-                    alive[cell.Level] = 1
+
+        for cell in self.grid.cells:
+            cell.State = cell.nextState
+
+            # check for extinction
+            if cell.State:
+                alive[cell.Level] = 1
+
+        
+        died = 0
+        #if a Level does not exist anymore, it is extinct, remove it and
+        #randomly assign a new level, also mark it as dead
+        if self.replaceExtinct:
+            for i in range(len(alive)):
+                if not alive[i]:
+                    died += 1
+                    self.dead[i] = 1
+                    # Set new level for all dead cells of this level
+                    for cell in self.grid.cells:
+                        if cell.Level == i:
+                            #nasty but quick
+                            newLevel = random.randint(0, self.M  - 1 - sum(self.dead))
+                            j = 0
+                            for i in range(newLevel):
+                                while True:
+                                    if not self.dead[j]:
+                                        j += 1
+                                        break
+                                    else:
+                                        j += 1
+                            cell.Level = j
+                            cell.State = True
+                            cell.nextState = True
+                    for cell in self.grid.cells:
+                        cell.setNeighbours()
+        else:
+            died = len(alive)-sum(alive)
+
+        if self.updateInteractions:
+            self.updateInteraction()
+            for cell in self.grid.cells:
+                cell.setNeighbours()
+
+
 
         #todo, append after update statistics?
         if self.calcConvergence:
-            st = str(CAmodel.Grid)
+            st = str(self.grid)
             try:
                 self.previousStates[st]
             except:
                 self.previousStates[st] = 1
             else:
                 raise ConvergedException()
+
         # update statistics
+        if died:
+            self.extinctions.append(died)
+            if sum(self.extinctions) == self.M:
+                raise AllDeadException()
         self.cmplxt.append(self.getComplexity())
         self.percentageAlive.append((1.*percAlive)/self.n**2)
         self.nAlive.append(sum(alive))
@@ -284,11 +382,10 @@ class CAmodel:
     def getComplexity(self):
         p_i = [0]*self.M
         # loop over all cells to determine probabilities
-        for row in CAmodel.Grid:
-            for cell in row:
-                if cell.State:
-                    # if cell is alive, update corresp. probability
-                    p_i[cell.Level] += 1
+        for cell in self.grid.cells:
+            if cell.State:
+                # if cell is alive, update corresp. probability
+                p_i[cell.Level] += 1
         p_i = [p_ii/float(self.n**2) for p_ii in p_i]
 
         # calculate entropy
@@ -303,7 +400,7 @@ class CAmodel:
 
     def printMatrix(self):
         new_grid = []
-        for row in self.Grid:
+        for row in self.grid:
             new_row = []
             for cell in row:
                 new_row.append(float(cell))
@@ -344,23 +441,42 @@ class CAmodel:
         for _ in range(self.perturbimpact):
             i = random.randint(0, self.n-1)
             j = random.randint(0, self.n-1)
+            s = random.randint(0, self.M-1)
             #toggle/perturb
-            self.Grid[i][j].State = not self.Grid[i][j].State
+            self.grid[i][j].State = not self.grid[i][j].State
+            self.grid[i][j].Level = s
+        self.setCellNeighbours()
 
 
-    def run(self, perturb=False):
+    def run(self, perturb=False, singleRuns=False):
         if perturb:
             self.calcConvergence=True
+            self.single_run_avalance = []
             i = 0
             j = 0
+            sr_steps = 0
             while True:
+                self.not_avalanched = self.grid.cells
                 try:
                     self.updateGrid(j)
                 except ConvergedException:
                     self.perturb()
                     self.previousStates=dict()
                     i += 1
-                    self.avalanceLengths.append(j)
+                    self.avalanceLengths.append((j, (n*n)-len(self.not_avalanched)))
+                    if singleRuns and i == 2:
+                        self.single_run_avalance.append((j, (n*n)-len(self.not_avalanched)))
+                        print((j,(n*n)-len(self.not_avalanched)))
+                        #reinit grid, custom counter for steps
+                        sr_steps += 1
+                        i = 0
+                        if sr_steps == self.steps:
+                            i = self.steps
+                        # create grid
+                        self.grid = self.initializeGrid(M, n)
+                        self.grid = self.reorderGrid(self.grid)
+                        self.interactions = self.setInteractions()
+                        self.setCellNeighbours()
                     j = 0
                     continue
                 if i == self.steps:
@@ -375,12 +491,12 @@ class CAmodel:
 
 M = 256  # number of interacting species
 n = 100  # dimensions of (square) 2-D lattice
-steps = 100  # number of steps
+steps = 3  # number of steps
 extProbs = dict()  # dictionary containing extinction probablities
 # extProbs[16] = 0.01
 # extProbs[90] = 0.001
 
-model = CAmodel(M, n, steps, extProbs=None, perturbimpact=10)
+model = CAmodel(M, n, steps, perturbimpact=10)
 # model.printMatrix()
 model.run(perturb=True)
 # import cProfile
@@ -389,5 +505,8 @@ model.printEntropy()
 # print model.cmplxt[1:-1:50]
 # print model.percentageAlive[1:-1:50]
 # print model.numExtinct
-print model.avalanceLengths
+#print model.avalanceLengths
+print model.single_run_avalance
+#print model.extinctions
+# print model.dead
 # model.printEntireMatrix()
