@@ -7,7 +7,7 @@ import math
 class Cell:
     """Store the information about species in cell"""
 
-    def __init__(self, model, Level=0, State=True):
+    def __init__(self, model, Level, State=True):
         """Initialize a new cell object
 
         Level -- identifier of the species
@@ -132,11 +132,7 @@ class Grid(list):
     _cells = None
 
     def __repr__(self):
-        ret = ""
-        for row in self:
-            for cell in row:
-                ret += repr(cell)
-        return ret
+        return "".join(map(repr, self.cells))
 
     @property
     def cells(self):
@@ -270,6 +266,7 @@ class CAmodel:
 
     def startState(self):
         """Returns True or False indicating dead or alive, randomly"""
+        return True
         return bool(random.randint(0, 2))
 
     def updateGrid(self, timestep):
@@ -446,7 +443,7 @@ class CAmodel:
             s = random.randint(0, self.M-1)
             #toggle/perturb
             self.grid[i][j].State = not self.grid[i][j].State
-            self.grid[i][j].Level = s
+            #self.grid[i][j].Level = s
         self.setCellNeighbours()
 
 
@@ -466,6 +463,7 @@ class CAmodel:
                     self.previousStates=dict()
                     i += 1
                     self.avalanceLengths.append((j, (n*n)-len(self.not_avalanched)))
+                    print ((j, (n*n)-len(self.not_avalanched)))
                     if singleRuns and i == 2:
                         self.single_run_avalance.append((j, (n*n)-len(self.not_avalanched)))
                         #reinit grid, custom counter for steps
@@ -493,23 +491,23 @@ class CAmodel:
 
 M = 256  # number of interacting species
 n = 100  # dimensions of (square) 2-D lattice
-steps = 1000  # number of steps
+steps = 100 # number of steps
 extProbs = dict()  # dictionary containing extinction probablities
 # extProbs[16] = 0.01
 # extProbs[90] = 0.001
 
-model = CAmodel(M, n, steps, perturbimpact=10, hierarchy=True,
+model = CAmodel(M, n, steps, perturbimpact=100, hierarchy=True,
         replaceExtinct=False, updateInteractions=False, hierarchyRange=20)
 # model.printMatrix()
-model.run(perturb=True, singleRuns=False)
+model.run(perturb=True, singleRuns=True)
 # import cProfile
 # cProfile.run('model.run()', sort='tottime')
-model.printEntropy()
+#model.printEntropy()
 # print model.cmplxt[1:-1:50]
 # print model.percentageAlive[1:-1:50]
 # print model.numExtinct
-print model.avalanceLengths
-#print model.single_run_avalance
+#print model.avalanceLengths
+print model.single_run_avalance
 #print model.extinctions
 # print model.dead
 # model.printEntireMatrix()
