@@ -30,9 +30,9 @@ class Cell:
             self.neighbours = cells
         if self.model.hierarchy:
             for cell in self.neighbours:
-                if cell.Level == self.Level + 1:
+                if cell.Level <= self.Level + self.model.hierarchyRange and cell.Level > self.Level:
                     self.preds.append(cell)
-                if cell.Level == self.Level - 1:
+                if cell.Level >= self.Level - self.model.hierarchyRange and cell.Level < self.Level:
                     self.preys.append(cell)
                 else:
                     self.rest.append(cell)
@@ -165,9 +165,11 @@ class AllDeadException(Exception):
 class CAmodel:
 
     def __init__(self, M, n, steps, extProbs=None, perturbimpact=10,
-                 hierarchy=True, replaceExtinct=False, updateInteractions=False):
+                 hierarchy=True, replaceExtinct=False, updateInteractions=False,
+                 hierarchyRange = 1):
         # store variables
         self.calcConvergence = False
+        self.hierarchyRange = hierarchyRange
         self.hierarchy = hierarchy
         self.replaceExtinct = replaceExtinct
         self.updateInteractions = updateInteractions
@@ -455,8 +457,8 @@ class CAmodel:
             i = 0
             j = 0
             sr_steps = 0
+            self.not_avalanched = self.grid.cells
             while True:
-                self.not_avalanched = self.grid.cells
                 try:
                     self.updateGrid(j)
                 except ConvergedException:
@@ -466,7 +468,6 @@ class CAmodel:
                     self.avalanceLengths.append((j, (n*n)-len(self.not_avalanched)))
                     if singleRuns and i == 2:
                         self.single_run_avalance.append((j, (n*n)-len(self.not_avalanched)))
-                        print((j,(n*n)-len(self.not_avalanched)))
                         #reinit grid, custom counter for steps
                         sr_steps += 1
                         i = 0
@@ -478,6 +479,7 @@ class CAmodel:
                         self.interactions = self.setInteractions()
                         self.setCellNeighbours()
                     j = 0
+                    self.not_avalanched = self.grid.cells
                     continue
                 if i == self.steps:
                     break
@@ -491,22 +493,23 @@ class CAmodel:
 
 M = 256  # number of interacting species
 n = 100  # dimensions of (square) 2-D lattice
-steps = 3  # number of steps
+steps = 1000  # number of steps
 extProbs = dict()  # dictionary containing extinction probablities
 # extProbs[16] = 0.01
 # extProbs[90] = 0.001
 
-model = CAmodel(M, n, steps, perturbimpact=10)
+model = CAmodel(M, n, steps, perturbimpact=10, hierarchy=True,
+        replaceExtinct=False, updateInteractions=False, hierarchyRange=20)
 # model.printMatrix()
-model.run(perturb=True)
+model.run(perturb=True, singleRuns=False)
 # import cProfile
 # cProfile.run('model.run()', sort='tottime')
 model.printEntropy()
 # print model.cmplxt[1:-1:50]
 # print model.percentageAlive[1:-1:50]
 # print model.numExtinct
-#print model.avalanceLengths
-print model.single_run_avalance
+print model.avalanceLengths
+#print model.single_run_avalance
 #print model.extinctions
 # print model.dead
 # model.printEntireMatrix()
