@@ -439,6 +439,19 @@ class CAmodel:
                     "plt.show()")
             subprocess.Popen(["python2", "entropy.py"])
 
+
+    def printCsvEntropy(self):
+		import csv
+		myfile = open("./data_analysis/data/output_entropy_test.csv", 'wb')
+		wr = csv.writer(myfile, quoting=csv.QUOTE_ALL)
+		wr.writerow(self.cmplxt)
+    
+    def printCsvAvalanche(self):
+		import csv
+		myfile = open("./data_analysis/data/output_ava_length_test.csv", 'wb')
+		wr = csv.writer(myfile, quoting=csv.QUOTE_ALL)
+		wr.writerow(self.avalanceLengths)
+
     def perturb(self):
         for _ in range(self.perturbimpact):
             i = random.randint(0, self.n-1)
@@ -493,7 +506,7 @@ class CAmodel:
 
 M = 256  # number of interacting species
 n = 100  # dimensions of (square) 2-D lattice
-steps = 1000  # number of steps
+steps = 50  # number of steps
 extProbs = dict()  # dictionary containing extinction probablities
 # extProbs[16] = 0.01
 # extProbs[90] = 0.001
@@ -505,6 +518,8 @@ model.run(perturb=True, singleRuns=False)
 # import cProfile
 # cProfile.run('model.run()', sort='tottime')
 model.printEntropy()
+model.printCsvEntropy()
+model.printCsvAvalanche()
 # print model.cmplxt[1:-1:50]
 # print model.percentageAlive[1:-1:50]
 # print model.numExtinct
