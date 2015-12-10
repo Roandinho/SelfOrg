@@ -503,16 +503,16 @@ class CAmodel:
 
 M = 256  # number of interacting species
 n = 100  # dimensions of (square) 2-D lattice
-steps = 1000 # number of steps
+steps = 5 # number of steps
 extProbs = dict()  # dictionary containing extinction probablities
 # extProbs[16] = 0.01
 # extProbs[90] = 0.001
 
 model = CAmodel(M, n, steps, perturbimpact=100, hierarchy=True,
-        replaceExtinct=False, updateInteractions=False, hierarchyRange=20,
-        neighbourhood_level = 3)
+        replaceExtinct=False, updateInteractions=False, hierarchyRange=1,
+        neighbourhood_level = 1)
 # model.printMatrix()
-model.run(perturb=False, singleRuns=False)
+model.run(perturb=True, singleRuns=False)
 # import cProfile
 # cProfile.run('model.run()', sort='tottime')
 model.printEntropy()

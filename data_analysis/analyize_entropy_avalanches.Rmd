@@ -1,0 +1,159 @@
+---
+title: "Multi-species game of life"
+author: "Hugo Pineda"
+date: "December 09, 2015"
+output:
+  html_document:
+      fig_caption: yes
+      theme: journal
+      toc: yes
+---
+
+```{r global_options, include=FALSE}
+
+#  date: '`r format(Sys.time(), ''%d %B, %Y'')`'
+rm(list=ls())
+
+## Setup code for knitr, we set all global settings here!
+
+knitr::opts_chunk$set(
+  ##########################
+  eval = TRUE, # ENABLE OR DISABLE ALL CHUNK EVALUATION
+  ##########################
+  # tidy = TRUE,
+  echo = FALSE,
+  warning= FALSE, 
+  message= FALSE
+)
+
+```
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(poweRlaw)
+
+```
+
+
+```{r}
+##  Read data
+
+# read entropy output, transpose to have timesteps in rows and add a time column which is a sequence from 1 till the length of the entropy column
+
+entropy.raw <- read.csv(file = "./data/output_entropy_test.csv", header = F)
+
+entropy <- as.data.frame(t(entropy.raw)) %>% rename(entropy = V1) %>% 
+  mutate(time = seq(1, length(entropy)))
+
+
+entropy.no.ava.raw <- read.csv(file = "./data/output_entropy_no_avalanches.csv", header = F)
+entropy.no.ava <- as.data.frame(t(entropy.no.ava.raw)) %>% rename(entropy = V1) %>% 
+  mutate(time = seq(1, length(entropy)))
+# avalanches.raw <-read.csv(file = "./data/output_ava_length.csv", header = F) 
+
+avalanches.raw <-read.csv(file = "./data/output_ava_length_test.csv", header = F) 
+avalanche <-  as.data.frame(t(avalanches.raw)) %>% rename(output = V1)  %>% 
+  # this column contains the timestep at which the perturbation took place
+  # it just sum the values of the avalanche length
+  mutate(
+    ava_length = as.numeric(gsub("[[:punct:]]|[[:punct:]] \\d+[[:punct:]]", "", as.character(output))),
+    not_avalanched = as.numeric(gsub("[[:punct:]]\\d+[[:punct:]]|[[:punct:]]", "", as.character(output))),
+                  time = cumsum(ava_length))
+```
+
+
+
+```{r}
+## Create an extra column for the entropy dataframe which indicate a group for each avalanche event
+g <- 0
+groups.ls <- lapply(1:length(avalanche$time),function(i, time){
+  g <<- g + 1
+  if(i == 1){
+    group = rep(g, time[i])  
+  }else{
+    group = rep(g, (time[i] - time[i - 1]))  
+  }
+  
+  # print(i)
+  # return(group)
+},time = avalanche$time)
+
+
+groups <- unlist(groups.ls)
+
+total <- left_join(entropy, avalanche, by = "time")[-nrow(entropy),] %>% 
+  mutate(group = groups,
+         time_ava = cumsum(ava_length))
+
+
+
+
+```
+
+
+## Entropy over time, vertical lines represent the perturbations
+
+### Without avalanches, 5000 steps
+```{r}
+entropy.no.ava %>% ggplot(aes(x = time, y = entropy)) +
+  geom_point() 
+
+
+```
+
+### With avalanches, 1000 steps
+```{r}
+total %>% ggplot(aes(x = time, y = entropy)) +
+  geom_point() +
+  geom_vline(data = avalanche, aes(xintercept = time))
+```
+
+## Distribution of avalanche length
+
+```{r}
+avalanche %>% ggplot(aes(ava_length)) +
+  geom_histogram(binwidth = 10)
+```
+
+## Power law fit of the avalanche length
+```{r}
+data_pl = displ$new(avalanche$ava_length)
+est <- estimate_xmin(data_pl)
+data_pl$setXmin(2)
+data_pl$setPars(2)
+est <- estimate_pars(data_pl)
+# data_pl$pars <- est$pars
+plot(data_pl)
+lines(data_pl, col=2)
+
+```
+
+
+## Calculate the change in entropy between two perturbation events
+
+```{r}
+avalanche.size <- total %>% group_by(group) %>% 
+  summarise(size = first(entropy) - last(entropy),
+            len = n()) %>% 
+  filter(group != 1)
+
+
+
+```
+
+### Distribution of avalanche size
+```{r}
+avalanche.size %>% ggplot(aes(size)) +
+  geom_histogram(binwidth = 0.001)
+
+```
+
+### Avalanche size vs avalanche length
+```{r}
+avalanche.size %>% ggplot(aes(x = len, y = size)) +
+  geom_point()
+
+```
+
