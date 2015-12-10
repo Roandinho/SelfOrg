@@ -162,10 +162,11 @@ class CAmodel:
 
     def __init__(self, M, n, steps, extProbs=None, perturbimpact=10,
                  hierarchy=True, replaceExtinct=False, updateInteractions=False,
-                 hierarchyRange = 1):
+                 hierarchyRange = 1, neighbourhood_level=1):
         # store variables
         self.calcConvergence = False
         self.hierarchyRange = hierarchyRange
+        self.neighbourhood_level = neighbourhood_level
         self.hierarchy = hierarchy
         self.replaceExtinct = replaceExtinct
         self.updateInteractions = updateInteractions
@@ -250,15 +251,13 @@ class CAmodel:
     def setCellNeighbours(self):
         for i in range(n):
             for j in range(n):
-                self.grid[i][j].setNeighbours(
-                    [self.grid[(i + 1) % n][(j - 1) % n],
-                     self.grid[(i + 1) % n][(j) % n],
-                     self.grid[(i + 1) % n][(j + 1) % n],
-                     self.grid[(i) % n][(j - 1) % n],
-                     self.grid[(i) % n][(j + 1) % n],
-                     self.grid[(i - 1) % n][(j - 1) % n],
-                     self.grid[(i - 1) % n][(j) % n],
-                     self.grid[(i - 1) % n][(j + 1) % n]])
+                neighbours = []
+                for x in range(-self.neighbourhood_level, self.neighbourhood_level+1):
+                    for y in range(-self.neighbourhood_level, self.neighbourhood_level+1):
+                        if not x and not y:
+                            continue
+                        neighbours.append(self.grid[(i + x) % n ][(j + y) % n])
+                self.grid[i][j].setNeighbours(neighbours)
 
     def startLevel(self, M):
         """Returns a completely random level (int) to start at"""
@@ -352,10 +351,10 @@ class CAmodel:
                 raise ConvergedException()
 
         # update statistics
-        if died:
-            self.extinctions.append(died)
-            if sum(self.extinctions) == self.M:
-                raise AllDeadException()
+        #if died:
+        #    self.extinctions.append(died)
+        #    if sum(self.extinctions) == self.M:
+        #        raise AllDeadException()
         self.cmplxt.append(self.getComplexity())
         self.percentageAlive.append((1.*percAlive)/self.n**2)
         self.nAlive.append(sum(alive))
@@ -491,23 +490,24 @@ class CAmodel:
 
 M = 256  # number of interacting species
 n = 100  # dimensions of (square) 2-D lattice
-steps = 100 # number of steps
+steps = 1000 # number of steps
 extProbs = dict()  # dictionary containing extinction probablities
 # extProbs[16] = 0.01
 # extProbs[90] = 0.001
 
 model = CAmodel(M, n, steps, perturbimpact=100, hierarchy=True,
-        replaceExtinct=False, updateInteractions=False, hierarchyRange=20)
+        replaceExtinct=False, updateInteractions=False, hierarchyRange=20,
+        neighbourhood_level = 3)
 # model.printMatrix()
-model.run(perturb=True, singleRuns=True)
+model.run(perturb=False, singleRuns=False)
 # import cProfile
 # cProfile.run('model.run()', sort='tottime')
-#model.printEntropy()
+model.printEntropy()
 # print model.cmplxt[1:-1:50]
 # print model.percentageAlive[1:-1:50]
 # print model.numExtinct
 #print model.avalanceLengths
-print model.single_run_avalance
+#print model.single_run_avalance
 #print model.extinctions
 # print model.dead
 # model.printEntireMatrix()
