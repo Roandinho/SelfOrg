@@ -265,7 +265,7 @@ class CAmodel:
 
     def startState(self):
         """Returns True or False indicating dead or alive, randomly"""
-        return True
+        #return True
         return bool(random.randint(0, 2))
 
     def updateGrid(self, timestep):
@@ -457,9 +457,46 @@ class CAmodel:
             self.grid[i][j].State = not self.grid[i][j].State
             #self.grid[i][j].Level = s
         self.setCellNeighbours()
+    
+    def printCSV(self, avalanche=True, entropy=False):
+        import csv
+        type = ""
+        if avalanche:
+            type_ = "avalanche"
 
+            name = "output-csv-%s_P-%s-%d_H-%s-%d_N-%d_I-%s_S-%d_M-%d.csv" % (type_, 
+                                                           str(model.perturb_bool),
+                                                           model.perturbimpact,
+                                                           str(model.hierarchy),
+                                                           model.hierarchyRange,
+                                                           model.neighbourhood_level,
+                                                           str(model.updateInteractions),
+                                                           model.steps,
+                                                           int(model.M)
+                                                           )
+            with open(name, "wb") as f:
+                wr = csv.writer(f, quoting=csv.QUOTE_ALL)
+                wr.writerow(self.avalanceLengths)
+
+        if entropy:
+            type_ = "entropy"
+            name = "output-csv-%s_P-%s-%d_H-%s-%d_N-%d_I-%s_S-%d_M-%d.csv" % (type_, 
+                                                           str(model.perturb_bool),
+                                                           model.perturbimpact,
+                                                           str(model.hierarchy),
+                                                           model.hierarchyRange,
+                                                           model.neighbourhood_level,
+                                                           str(model.updateInteractions),
+                                                           model.steps,
+                                                           int(model.M)
+                                                           )
+            with open(name, "wb") as f:
+                wr = csv.writer(f, quoting=csv.QUOTE_ALL)
+                wr.writerow(self.cmplxt)
 
     def run(self, perturb=False, singleRuns=False):
+        self.perturb_bool=perturb
+        self.singleRuns=singleRuns
         if perturb:
             self.calcConvergence=True
             self.single_run_avalance = []
@@ -475,7 +512,6 @@ class CAmodel:
                     self.previousStates=dict()
                     i += 1
                     self.avalanceLengths.append((j, (n*n)-len(self.not_avalanched)))
-                    print ((j, (n*n)-len(self.not_avalanched)))
                     if singleRuns and i == 2:
                         self.single_run_avalance.append((j, (n*n)-len(self.not_avalanched)))
                         #reinit grid, custom counter for steps
@@ -501,27 +537,24 @@ class CAmodel:
             print ("model run completed")
 
 
-M = 256  # number of interacting species
+M =1  # number of interacting species
 n = 100  # dimensions of (square) 2-D lattice
-steps = 5 # number of steps
+steps = 10 # number of steps
 extProbs = dict()  # dictionary containing extinction probablities
 # extProbs[16] = 0.01
 # extProbs[90] = 0.001
-
-model = CAmodel(M, n, steps, perturbimpact=100, hierarchy=True,
+model = CAmodel(M, n, steps, perturbimpact=10, hierarchy=True,
         replaceExtinct=False, updateInteractions=False, hierarchyRange=1,
         neighbourhood_level = 1)
 # model.printMatrix()
-model.run(perturb=True, singleRuns=False)
+model.run(perturb=False, singleRuns=False)
 # import cProfile
 # cProfile.run('model.run()', sort='tottime')
-model.printEntropy()
-model.printCsvEntropy()
-model.printCsvAvalanche()
 # print model.cmplxt[1:-1:50]
 # print model.percentageAlive[1:-1:50]
 # print model.numExtinct
-#print model.avalanceLengths
+print model.avalanceLengths
+model.printCSV(avalanche=True, entropy=True)
 #print model.single_run_avalance
 #print model.extinctions
 # print model.dead
