@@ -1,0 +1,484 @@
+---
+title: "Bootstrap avalanches"
+author: "Hugo Pineda"
+date: "December 15, 2015"
+output:
+  html_document:
+      fig_caption: yes
+      theme: journal
+      toc: yes
+---
+
+```{r global_options, include=FALSE}
+
+#  date: '`r format(Sys.time(), ''%d %B, %Y'')`'
+rm(list=ls())
+
+## Setup code for knitr, we set all global settings here!
+
+knitr::opts_chunk$set(
+  ##########################
+  eval = TRUE, # ENABLE OR DISABLE ALL CHUNK EVALUATION
+  ##########################
+  # tidy = TRUE,
+  echo = FALSE,
+  warning= FALSE, 
+  message= FALSE
+)
+
+```
+
+
+```{r packages}
+library(ggplot2)
+theme_set(theme_bw(14))
+library(dplyr)
+library(poweRlaw)
+library(knitr)
+library(data.table)
+library(gridExtra)
+
+```
+
+
+
+
+```{r}
+extract_parms <- function(file){
+    parms <- strsplit(file, split = "_")[[1]][-1]
+  
+  perturb <- strsplit(parms[grep("P", parms)], "-")[[1]][-1]
+  perturb.bool <- as.logical(perturb[1])
+  perturb.n <- as.numeric(perturb[2])
+  
+  hierachy <- strsplit(parms[grep("H", parms)], "-")[[1]][-1]
+  hierachy.bool <- as.logical(hierachy[1])
+  hierachy.n <- as.numeric(hierachy[2])
+  
+  neighbour.level <- as.numeric(strsplit(parms[grep("N", parms)], "-")[[1]][-1])
+  
+  update.interaction <- as.logical(strsplit(parms[grep("I", parms)], "-")[[1]][-1])
+  
+  
+  steps <- as.numeric(
+        strsplit(parms[grep("S",parms)], "-")[[1]][-1]
+  )
+  
+  
+  M <- as.numeric(sub(".csv", "", strsplit(parms[grep("M",parms)], "-")[[1]][-1]))
+  return(list(perturb.bool, perturb.n, hierachy.bool, hierachy.n,
+              neighbour.level, update.interaction, steps, M))
+}
+```
+
+#### Avalanche files
+
+```{r read_data, cache=TRUE}
+txt_files_avalanches <- list.files("./data/avalanches/")
+txt_files_avalanches <- paste("./data/avalanches/", txt_files_avalanches, sep = "")[6]
+
+
+data_list <- lapply(txt_files_avalanches, function(file){
+  print(file)
+  # file <- txt_files_entropy[2]
+  #   file <- "./data/entropy/output_entropy_PF0_HT50_N10_T5000.csv"
+  parms.ls <- extract_parms(file)
+  data.raw <- read.csv(file, sep = ",", header = FALSE) 
+  
+ data <- as.data.frame(t(data.raw)) %>% rename(output = V1)  %>% 
+  # this column contains the timestep at which the perturbation took place
+  # it just sum the values of the avalanche length
+  mutate(
+    ava_length = as.numeric(gsub("[[:punct:]]|[[:punct:]] \\d+[[:punct:]]", "", as.character(output))),
+    affected_cells = as.numeric(gsub("[[:punct:]]\\d+[[:punct:]]|[[:punct:]]", "", as.character(output))),
+                  time = cumsum(ava_length)) 
+  
+ data$perturb <- parms.ls[[1]]
+ data$perturb_n <- parms.ls[[2]]
+ data$hierarchy <- parms.ls[[3]]
+ data$hierarchy_n <- parms.ls[[4]]
+ data$neighbours_level <- parms.ls[[5]]
+ data$update <- parms.ls[[6]]
+ data$steps <- parms.ls[[7]]
+ data$M <- parms.ls[[8]]
+ return(data)
+})
+
+avalanches <- do.call(rbind, data_list) 
+# %>% 
+  # group_by(perturb_n) %>% 
+  #   filter(time != min(time)) %>% 
+  # ungroup() %>% 
+  # filter(
+  #   !(perturb_n == 2 & time > 18000),
+  #   !(perturb_n == 5 & time > 7000),
+  #   !(perturb_n == 10 & time > 9000),
+  #   !(perturb_n == 25 & time > 10000)
+  # )
+
+
+
+```
+
+#### Summary of used parameters
+
+```{r}
+kable(avalanches %>% select(-output, -affected_cells, -ava_length, -time) %>% distinct() %>% arrange(perturb_n))
+  
+```
+
+# Bootstrap analysis
+
+Here I perform bootstrap analysis on the affected_cells for perturbation size = 2, I want to investigate if manually setting the xmin parameter to 2 would return significant fit and compare it with a fit in which this parameter is automatically estimated by the algorithm. 
+All the analysis are done with poweRlaw package. [In this article](http://arxiv.org/abs/1407.3492) you can find the theoretical background of the analysis. 
+
+## Perform the analysis estimating xmin from the data
+```{r, results="hide", cache=TRUE, fig.keep="none"}
+ava.per <-avalanches %>% 
+  filter(M == 256, steps == 15000, perturb_n == 2) %>% 
+  filter(time != min(time) & affected_cells != 0)
+
+
+  m_m = displ$new(ava.per$affected_cells)
+  
+  m_m$setPars(2)
+  # # 
+  (est = estimate_pars(m_m))
+  (est = estimate_xmin(m_m))
+  
+  m_m$setXmin(est)
+  KS <- est$KS
+  
+  
+  # bs = bootstrap(m_m, no_of_sims=500, threads=3)
+  bs <- bootstrap_p(m_m, no_of_sims=500, threads = 3)
+  pars_sd <- sd(bs$bootstraps$pars)
+  xmin_sd <- sd(bs$bootstraps$xmin)
+  
+  
+  dd <- bind_rows(
+    plot(m_m) %>% mutate(type = rep("data")),
+    lines(m_m) %>% mutate(type = rep("powerlaw"))
+  )
+    
+  
+  
+  
+```
+
+
+## Fit
+
+
+```{r, fig.height=4, fig.width=4, fig.cap="The red line represent the best fit returned by the algorithm."}
+dd %>%
+  filter(type == "data") %>%ggplot(aes(x, y)) +
+   geom_point()+
+  scale_y_log10() +
+  scale_x_log10() +
+    geom_line(data = dd %>% filter(type == "powerlaw"), aes(x, y), color = "red", size = 1.5) +
+  xlab("Affected cells") +
+  ylab("CDF")
+  
+```
+
+## The naif approach of fit a linear regression model (I don't trust this): 
+```{r, fig.height=4, fig.width=4}
+dd %>%
+  filter(type == "data") %>%ggplot(aes(x, y)) +
+   geom_point()+
+  scale_y_log10() +
+  scale_x_log10() +
+  stat_smooth(method = "lm") +
+    # geom_line(data = dd %>% filter(type == "powerlaw"), aes(x, y), color = "red", size = 1.5) +
+  xlab("Affected cells") +
+  ylab("CDF")
+  
+
+summary(lm(y ~ x, data = dd %>% filter(type == "data")))
+```
+
+
+
+## Bootstrap results for parameters uncertainty and p.value
+```{r, fig.height=6, fig.width=12}
+plot(bs)
+  
+```
+
+```{r, fig.height=3, fig.width=9}
+
+a.p <- ggplot(bs$bootstraps, aes(pars)) +
+  geom_histogram(binwidth = 0.05, fill = "white", colour = "black") +
+  xlab("alpha")
+
+x.p <- ggplot(bs$bootstraps, aes(xmin)) +
+  geom_histogram(fill = "white", colour = "black") +
+  xlab("xmin")
+
+s.p <- ggplot(bs$bootstraps, aes(xmin, pars)) +
+geom_point() +
+  ylab("alpha")
+
+grid.arrange(a.p, x.p, s.p, nrow = 1)
+
+
+```
+
+
+## Estimated parameters and statistics
+
+The KS statistic is the maximum distance between the CDFs of the data and the fitted model, so the smallest the better. The bootstrap p.value tells us about the chance of the data to be generated from a power law distribution. Where:
+* H0 : data is generated from a power law distribution.
+* H1 : data is not generated from a power law distribution.
+
+So if p.value > threshold (0.1) we can assume the it follows indeed a power law. 
+
+Here is a bit more about how this p.value is calculated (extracted from [here](http://arxiv.org/abs/0706.1062)): 
+
+* "...our procedure is as follows. First, we fit our empirical data to the power-law model using the methods of Section 3 and calculate the KS statistic for this fit. Next, we generate a large number of power-law distributed synthetic data sets with scaling parameter α and lower bound xmin equal to those of the distribution that best fits the observed data. We fit
+each synthetic data set individually to its own power-law model and calculate the KS
+statistic for each one relative to its own model. Then we simply count what fraction
+of the time the resulting statistic is larger than the value for the empirical data. This
+fraction is our p-value".
+
+"
+
+```{r}
+df <- data.frame("alpha" = m_m$getPars(), "alpha_sd" = pars_sd, "xmin" = m_m$getXmin(), "xmin_sd" = xmin_sd, "KS" = ifelse(is.null(KS), NA, KS), bstrp_pvalue = bs$p)
+kable(df)
+
+```
+
+## Compare with a log-normal distribution
+
+We can also compare if our data fits better other distribution. I will compare the power law against a log-normal distribution. The details are also explained in the previous links. The analysis returns two p.values, a two-sided p.value which test:
+
+* H0: both distributions are equally far from the true distribution.
+* H1: one of the test distributions is closer to the true distribution.
+And a one-sided p.value which test whether the first model is better than the second. Here I set the first model to be the power law. 
+
+
+
+```{r, fig.keep="none", results="hide"}
+x <- ava.per$affected_cells
+m1 = displ$new(x)
+m1$setPars(estimate_pars(m1))
+m1$setXmin((estimate_xmin(m1)))
+m2 = dislnorm$new(x)
+m2$setPars(estimate_pars(m2))
+m2$setXmin(m1$getXmin())
+plot(m2, ylab="CDF")
+# lines(m1)
+# lines(m2, col=2, lty=2)
+dd <- bind_rows(
+  dd,
+  lines(m2) %>% mutate(type = rep("log-normal"))
+)
+comp = compare_distributions(m1, m2)
+
+
+```
+
+
+#### Two-sided p.value
+```{r}
+comp$p_two_sided
+```
+
+#### One-sided p.value
+```{r}
+comp$p_one_sided
+```
+
+
+
+```{r, fig.height=3, fig.width=5}
+dd %>%
+  filter(type == "data") %>%ggplot(aes(x, y)) +
+   geom_point()+
+  scale_y_log10() +
+  scale_x_log10() +
+    geom_line(data = dd %>% filter(type == "powerlaw"), aes(x, y, colour = "powerlaw"), size = 1.5) +
+      geom_line(data = dd %>% filter(type == "log-normal"), aes(x, y, colour = "log-normal"), size = 1.5) +
+  scale_color_discrete(name  ="Fit") +
+  xlab("Affected cells") +
+  ylab("CDF")
+  
+
+```
+
+###  Conclusion
+
+Using the bootstrap method we can assume that the data follows a power law from x = 154, however we cannot statistically distinguish it (alhpa < 0.05)  from a log-normal distribution. 
+
+## Perform the test setting the xmin value manually to 2
+```{r, results="hide", cache=TRUE}
+ava.per <-avalanches %>% 
+  filter(M == 256, steps == 15000, perturb_n == 2) %>% 
+  filter(time != min(time) & affected_cells != 0)
+
+
+  m_m = displ$new(ava.per$affected_cells)
+  # m_m$setXmin(estimate_xmin(m_m,  xmins = seq(1, 20, 1)))
+  m_m$setXmin(2)
+  m_m$setPars(estimate_pars(m_m))
+  # # 
+  # (est = estimate_pars(m_m))
+  # m_m$setPars(est)
+  
+  
+  # m_m$setXmin(est)
+  KS <- est$KS
+
+bs <- bootstrap_p(m_m, threads = 3, no_of_sims=500, xmins = seq(2, 20, 2))  
+  pars_sd <- sd(bs$bootstraps$pars)
+  xmin_sd <- sd(bs$bootstraps$xmin)
+  
+```
+
+
+```{r, fig.keep="none"}
+dd <- bind_rows(
+    plot(m_m) %>% mutate(type = rep("data")),
+    lines(m_m) %>% mutate(type = rep("powerlaw"))
+  )
+    
+  
+```
+
+
+## Fit
+```{r, fig.height=4, fig.width=4}
+dd %>%
+  filter(type == "data") %>%ggplot(aes(x, y)) +
+   geom_point()+
+  scale_y_log10() +
+  scale_x_log10() +
+    geom_line(data = dd %>% filter(type == "powerlaw"), aes(x, y), color = "red", size = 1.5) +
+  xlab("Affected cells") +
+  ylab("CDF")
+  
+```
+
+## The naif approach of fit a linear regression model (I don't trust this): 
+```{r, fig.height=4, fig.width=4}
+dd %>%
+  filter(type == "data") %>%ggplot(aes(x, y)) +
+   geom_point()+
+  scale_y_log10() +
+  scale_x_log10() +
+  stat_smooth(method = "lm") +
+    # geom_line(data = dd %>% filter(type == "powerlaw"), aes(x, y), color = "red", size = 1.5) +
+  xlab("Affected cells") +
+  ylab("CDF")
+  
+
+summary(lm(y ~ x, data = dd %>% filter(type == "data")))
+```
+
+
+## Bootstrap results for parameters uncertainty and p.value
+```{r, fig.height=6, fig.width=12}
+plot(bs)
+  
+```
+
+```{r, fig.height=3, fig.width=9}
+
+a.p <- ggplot(bs$bootstraps, aes(pars)) +
+  geom_histogram(binwidth = 0.05, fill = "white", colour = "black") +
+  xlab("alpha")
+
+x.p <- ggplot(bs$bootstraps, aes(xmin)) +
+  geom_histogram(fill = "white", colour = "black") +
+  xlab("xmin")
+
+s.p <- ggplot(bs$bootstraps, aes(xmin, pars)) +
+geom_point() +
+  ylab("alpha")
+
+grid.arrange(a.p, x.p, s.p, nrow = 1)
+
+
+```
+
+
+## Estimated parameters and statistics
+```{r}
+df <- data.frame("alpha" = m_m$getPars(), "alpha_sd" = pars_sd, "xmin" = m_m$getXmin(), "xmin_sd" = xmin_sd, "KS" = ifelse(is.null(KS), NA, KS), bstrp_pvalue = bs$p)
+kable(df)
+```
+
+## Compare with a log-normal distribution using
+
+```{r, results="hide", fig.keep="none"}
+x <- ava.per$affected_cells
+# m1 = displ$new(x)
+# 
+# m1$setPars(estimate_pars(m1))
+# m1$setXmin(2)
+m1 = displ$new(x)
+  
+  m1$setPars(2)
+  # # 
+  (est = estimate_pars(m1))
+  (est = estimate_xmin(m1,  xmins = seq(2, 10, 1)))
+
+m1$setXmin(est)
+m2 = dislnorm$new(x)
+m2$setPars(estimate_pars(m2))
+m2$setXmin(m1$getXmin())
+plot(m2, ylab="CDF")
+lines(m1)
+lines(m2, col=2, lty=2)
+comp = compare_distributions(m1, m2)
+
+dd <- bind_rows(
+  dd,
+  lines(m2) %>% mutate(type = rep("log-normal"))
+)
+# comp = compare_distributions(m1, m2)
+
+
+# comp$p_two_sided
+# comp$test_statistic
+
+```
+
+
+
+
+
+#### Two-sided p.value
+```{r}
+comp$p_two_sided
+```
+
+#### One-sided p.value
+```{r}
+comp$p_one_sided
+```
+
+
+
+
+```{r, fig.height=3, fig.width=5}
+dd %>%
+  filter(type == "data") %>%ggplot(aes(x, y)) +
+   geom_point()+
+  scale_y_log10() +
+  scale_x_log10() +
+    geom_line(data = dd %>% filter(type == "powerlaw"), aes(x, y, colour = "powerlaw"), size = 1.5) +
+      geom_line(data = dd %>% filter(type == "log-normal"), aes(x, y, colour = "log-normal"), size = 1.5) +
+  scale_color_discrete(name  ="Fit") +
+  xlab("Affected cells") +
+  ylab("CDF")
+  
+
+```
+
+
+###  Conclusion
+
+If we use the complete dataset we cannot statistically determine that the data follows a power law.

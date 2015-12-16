@@ -1,0 +1,1184 @@
+---
+title: "Fitting a power law to avalanches size distribution"
+author: "Hugo Pineda"
+date: "December 15, 2015"
+output:
+  html_document:
+      fig_caption: yes
+      theme: journal
+      toc: yes
+---
+
+```{r global_options, include=FALSE}
+
+#  date: '`r format(Sys.time(), ''%d %B, %Y'')`'
+rm(list=ls())
+
+## Setup code for knitr, we set all global settings here!
+
+knitr::opts_chunk$set(
+  ##########################
+  eval = TRUE, # ENABLE OR DISABLE ALL CHUNK EVALUATION
+  ##########################
+  # tidy = TRUE,
+  echo = FALSE,
+  warning= FALSE, 
+  message= FALSE
+)
+
+```
+
+
+```{r packages}
+library(ggplot2)
+theme_set(theme_bw(14))
+library(dplyr)
+library(poweRlaw)
+library(knitr)
+library(data.table)
+library(igraph)
+```
+
+#### Entropy files
+
+```{r entropy}
+txt_files_entropy <- list.files("./data/entropy/transposed/")
+txt_files_entropy <- paste("./data/entropy/transposed/", txt_files_entropy, sep = "")
+
+
+data_list <- lapply(txt_files_entropy, function(file){
+  print(file)
+  # file <- txt_files_entropy[4]
+  # file <-paste(sub("\\.csv", "" , file),  "_transposed.csv", sep = "")
+  
+  
+    data <- fread(file) 
+  
+  
+  
+ 
+ return(data)
+})
+
+entropy <- do.call(rbind, data_list)
+```
+
+
+
+
+
+```{r}
+extract_parms <- function(file){
+    parms <- strsplit(file, split = "_")[[1]][-1]
+  
+  perturb <- strsplit(parms[grep("P", parms)], "-")[[1]][-1]
+  perturb.bool <- as.logical(perturb[1])
+  perturb.n <- as.numeric(perturb[2])
+  
+  hierachy <- strsplit(parms[grep("H", parms)], "-")[[1]][-1]
+  hierachy.bool <- as.logical(hierachy[1])
+  hierachy.n <- as.numeric(hierachy[2])
+  
+  neighbour.level <- as.numeric(strsplit(parms[grep("N", parms)], "-")[[1]][-1])
+  
+  update.interaction <- as.logical(strsplit(parms[grep("I", parms)], "-")[[1]][-1])
+  
+  
+  steps <- as.numeric(
+        strsplit(parms[grep("S",parms)], "-")[[1]][-1]
+  )
+  
+  
+  M <- as.numeric(sub(".csv", "", strsplit(parms[grep("M",parms)], "-")[[1]][-1]))
+  return(list(perturb.bool, perturb.n, hierachy.bool, hierachy.n,
+              neighbour.level, update.interaction, steps, M))
+}
+```
+
+#### Avalanche files
+
+```{r read_data, cache=TRUE}
+txt_files_avalanches <- list.files("./data/avalanches/")
+txt_files_avalanches <- paste("./data/avalanches/", txt_files_avalanches, sep = "")
+
+
+data_list <- lapply(txt_files_avalanches, function(file){
+  print(file)
+  # file <- txt_files_entropy[2]
+  #   file <- "./data/entropy/output_entropy_PF0_HT50_N10_T5000.csv"
+  parms.ls <- extract_parms(file)
+  data.raw <- read.csv(file, sep = ",", header = FALSE) 
+  
+ data <- as.data.frame(t(data.raw)) %>% rename(output = V1)  %>% 
+  # this column contains the timestep at which the perturbation took place
+  # it just sum the values of the avalanche length
+  mutate(
+    ava_length = as.numeric(gsub("[[:punct:]]|[[:punct:]] \\d+[[:punct:]]", "", as.character(output))),
+    affected_cells = as.numeric(gsub("[[:punct:]]\\d+[[:punct:]]|[[:punct:]]", "", as.character(output))),
+                  time = cumsum(ava_length)) 
+  
+ data$perturb <- parms.ls[[1]]
+ data$perturb_n <- parms.ls[[2]]
+ data$hierarchy <- parms.ls[[3]]
+ data$hierarchy_n <- parms.ls[[4]]
+ data$neighbours_level <- parms.ls[[5]]
+ data$update <- parms.ls[[6]]
+ data$steps <- parms.ls[[7]]
+ data$M <- parms.ls[[8]]
+ return(data)
+})
+
+avalanches <- do.call(rbind, data_list) 
+# %>% 
+  # group_by(perturb_n) %>% 
+  #   filter(time != min(time)) %>% 
+  # ungroup() %>% 
+  # filter(
+  #   !(perturb_n == 2 & time > 18000),
+  #   !(perturb_n == 5 & time > 7000),
+  #   !(perturb_n == 10 & time > 9000),
+  #   !(perturb_n == 25 & time > 10000)
+  # )
+
+
+
+```
+
+#### Summary of used parameters
+
+```{r}
+kable(entropy %>% select(-entropy, -time) %>% distinct() %>% arrange(perturb_n))
+  
+```
+
+
+
+## Entropy over time
+```{r plot_entropy, fig.height=6, fig.width=12, cache=TRUE}
+
+entropy %>% 
+  # filter(perturb_n == 2) %>% 
+  ggplot(aes(time, entropy)) +
+  geom_line() +
+  facet_wrap(~perturb_n, scales = "free_x", nrow = 2)
+
+```
+
+
+# Use all the avalanche values
+## Avalanche size (affected cells) 
+
+
+### Avalanche size (affected cells) over time
+```{r plot_time, fig.height=6, fig.width=12}
+avalanches %>% ggplot(aes(x = time, y = affected_cells)) +
+  # geom_histogram(binwidth = 3) +
+  geom_point() +
+  facet_wrap(~perturb_n, scales = "free_x", nrow = 2) 
+
+
+# avalanches %>% 
+#   mutate(
+#    bins = cut(affected_cells, breaks = 100)
+# ) %>% 
+#   qplot(bins,  geom = "histogram", fill=I("blue")) +
+#   # facet_wrap(~perturb_n, scales = "free") +
+#   theme(axis.text.x = element_text(angle=90))
+# 
+#   ggplot(aes(x = affected_cells)) +
+#   geom_histogram(binwidth = 50) +
+#   # geom_point() +
+#   facet_wrap(~perturb_n, scales = "free", nrow = 2) 
+```
+
+
+```{r affect_cell_calc, fig.keep="none"}
+ava.per <- avalanches <- avalanches %>% 
+  filter(M == 256, steps == 15000)
+pert <- unique(ava.per$perturb_n)
+p1.ls <- lapply(pert, function(p_s, df){
+  # p_s <- 2
+  a <- df %>% 
+    filter(perturb_n == p_s) %>% 
+    filter(time != min(time)) 
+  # %>% 
+  #   filter(time < 17000)
+  # 
+  a %>% ggplot(aes(time, affected_cells)) +
+    geom_point()
+  
+  x <- a$affected_cells 
+  
+  # data("moby")
+  # x <- moby
+  .hist <- hist(x, breaks=max(x) / 10)
+  # .hist <- hist(x, breaks=180)
+  df.plot <- data.frame(avalanche_size = .hist$mids, counts = .hist$counts, perturb_n = rep(p_s))  %>% filter(counts != 0)
+  
+  # df.plot %>% ggplot(aes(avalanche_size, counts)) +
+  # geom_point() +
+  # # stat_smooth(method = "lm") +
+  # scale_y_log10() +
+  # scale_x_log10() +
+  # facet_wrap(~perturb_n, scales = "free_x")
+  # 
+  return(df.plot)
+}, df = ava.per)
+
+p1 <- do.call(rbind, p1.ls) 
+
+
+```
+
+
+
+
+
+
+
+```{r fit_power_law3, fig.keep="none"}
+
+
+ava.per <- avalanches <- avalanches %>% 
+  filter(M == 256, steps == 15000)
+
+pert <- unique(ava.per$perturb_n)
+p2.ls <- lapply(pert, function(p_s, df){
+  # p_s <- 10
+  a <- df %>% 
+    filter(perturb_n == p_s) %>% 
+    filter(time != min(time) & affected_cells != 0)
+  # %>% 
+#   #   filter(time < 17000)
+#   x <- a$affected_cells
+#   X <- sort(x)
+#   p <- ppoints(100)
+#   df  <- data.frame(x=(1-p),y=(quantile(X,p=p)))
+# fit <- lm(y~x,df)
+# plot(log(quantile(X,p=p)),log(1-p),
+#      ylab="log[P(X > x)]",xlab="log(x)",main="CCDF: log-log")
+# summary(fit)                 
+#                  
+#   (plot(sort(x) , 1-ecdf(x)(sort(x) ), log="xy"))
+#   # a %>% ggplot(aes(time, affected_cells)) +
+#     df %>% ggplot(aes(x, y)) +
+#     geom_point() +
+#       # stat_ecdf() +
+#       stat_smooth(method = "lm") +
+#     scale_y_log10() +
+#   scale_x_log10()
+#   
+  
+  p.l.f <- power.law.fit(a$affected_cells)
+  
+  m_m = displ$new(a$affected_cells)
+  dd = plot(m_m)
+  dd$perturb_n <- rep(p_s)
+  # # m_m = displ$new(moby)
+  # m_m$setXmin(p_s)
+  # m_m$setPars(2)
+  # # 
+  # # (est = estimate_pars(m_m))
+  # # (est = estimate_xmin(m_m))
+  # 
+  # # 
+  # est <- estimate_xmin(m_m)
+  # m_m$setXmin(est)
+  # 
+  # # # m_m$setXmin(2)
+  # (est = estimate_pars(m_m))
+  # m_m$setPars(est)
+  # # plot(m_m)
+  # # lines(m_m, col=2)
+  # # 
+  # # dd = plot(m_m)
+  
+  # plot(m_m)
+  # lines(m_m, col=2)
+
+  # dd %>%ggplot(aes(x, y)) +
+  #  geom_point()+
+  # scale_y_log10() +
+  # scale_x_log10() +
+  # stat_smooth(method = "lm")+
+  # facet_wrap(~perturb_n, scales = "free_x")
+  # 
+# bs = bootstrap(m_m, no_of_sims=100, threads=2, xmins = seq(2, 20, 2))
+# 
+#   plot(bs)
+  # bs_p <- bootstrap_p(m_m, threads = 2)
+  
+  # parms <- data.frame(
+  #   "perturb_n" = p_s, 
+  #   "xmin" = m_m$xmin,
+  #   "alpha" = m_m$pars,
+  #   "p_value" = bs_p$p
+  #             )
+  
+  parms <- data.frame(
+    "perturb_n" = p_s, 
+    "xmin" = p.l.f$xmin,
+    "alpha" = p.l.f$alpha,
+    "KS" = p.l.f$KS.stat,
+    "KS_p_value" = p.l.f$KS.p
+              )
+  return(list("df.plot"=  dd, "parms.df" = parms))
+}, df = ava.per)
+
+
+p2 <- do.call(rbind, lapply(p2.ls, "[[", 1))
+
+
+model.results <- do.call(rbind, lapply(p2.ls, "[[", 2))
+
+ 
+```
+
+
+
+### This is how a power law should look like in both approaches (drawn from another dataset)
+```{r, fig.keep="none", results="hide"}
+#   geom_point()
+  
+data(moby)
+power.law.fit(moby)
+.hist <- hist(moby, breaks=max(moby) / 10)
+
+
+  m_m = displ$new(moby)
+  # # m_m = displ$new(moby)
+  # m_m$setXmin(2)
+  # m_m$setPars(2)
+  # # 
+  # # (est = estimate_pars(m_m))
+  # # (est = estimate_xmin(m_m))
+  # 
+  # 
+  # est <- estimate_xmin(m_m)
+  # m_m$setXmin(est)
+  # 
+  # # m_m$setXmin(2)
+  # est <- estimate_pars(m_m)
+  # m_m$setPars(est)
+  # plot(m_m)
+  # lines(m_m, col=2)
+  # 
+  
+  dd.plot = 
+    bind_rows(
+    plot(m_m) %>% 
+    mutate(group = rep("CDF")),
+    dd.hist <- data.frame(x = .hist$mids, y = .hist$counts, group = rep("histogram"))  %>% filter(y != 0)
+    )
+    
+  
+  
+  
+```
+
+```{r,  fig.height=3, fig.width=6}
+
+
+
+
+
+  dd.plot %>% ggplot(aes(x, y)) +
+  geom_point() +
+  # stat_smooth(method = "lm") +
+  scale_y_log10() +
+  scale_x_log10() +
+  facet_wrap(~group,scales = "free")
+
+```
+
+
+
+
+### Histogram approach
+```{r plot_hist, fig.height=6, fig.width=12}
+p1 %>% ggplot(aes(avalanche_size, counts)) +
+  geom_point() +
+  # stat_smooth(method = "lm") +
+  scale_y_log10() +
+  scale_x_log10() +
+  facet_wrap(~perturb_n, scales = "free", nrow = 2) +
+  xlab("Affected cells") 
+
+```
+
+### Cumulative distribution function approach
+```{r, fig.height=6, fig.width=12}
+p2 %>%
+  # filter(type == "point") %>%
+  ggplot(aes(x, y)) +
+   geom_point()+
+  scale_y_log10() +
+  scale_x_log10() +
+  facet_wrap(~perturb_n, scales = "free", nrow = 2) +
+  xlab("Affected cells") +
+  ylab("CDF")
+
+
+# p2 %>%
+#   filter(type == "point") %>%ggplot(aes(x, y)) +
+#    geom_point()+
+#   scale_y_log10() +
+#   scale_x_log10() +
+#     geom_line(data = p2 %>% filter(type == "model"), aes(x, y), color = "red", size = 1.5) +
+#   facet_wrap(~perturb_n, scales = "free", nrow = 2) +
+#   xlab("Affected cells") +
+#   ylab("CDF")
+
+```
+
+### Results of the fit
+
+Here I use the power.law.fit function from igraph package because it calculates statitics without bootstraping, so much faster. The approach is to use this method to explore the different perturbation sizes and then use bootstrap over one of them. From the function help this is what the statistics means:
+
+
+* alpha: the exponent of the fitted power-law distribution.
+* xmin: the minimum value from which the power-law distribution was fitted. In other words, only the values larger than xmin were used from the input vector.
+
+* KS: the test statistic of a Kolmogorov-Smirnov test that compares the fitted distribution with the input vector. Smaller scores denote better fit.
+* KS.pvalue: the p-value of the Kolmogorov-Smirnov test. Small p-values (less than 0.05) indicate that the test rejected the hypothesis that the original data could have been drawn from the fitted power-law distribution.
+```{r}
+kable(model.results %>% arrange(perturb_n))
+```
+
+
+
+
+## Avalanche length
+
+### Avalanche length over time
+```{r plot_time_len, fig.height=6, fig.width=12}
+avalanches %>% ggplot(aes(x = time, y = ava_length)) +
+  # geom_histogram(binwidth = 3) +
+  geom_point() +
+  facet_wrap(~perturb_n, scales = "free_x", nrow = 2) 
+```
+
+
+
+```{r, fig.keep="none"}
+
+ava.per <- avalanches <- avalanches %>% 
+  filter(M == 256, steps == 15000)
+
+pert <- unique(ava.per$perturb_n)
+p1.ls <- lapply(pert, function(p_s, df){
+  
+  a <- df %>% 
+    filter(perturb_n == p_s) %>% 
+    filter(time != min(time))
+  
+  x <- a$ava_length
+  .hist <- hist(x, breaks=max(x) / 10)
+  df.plot <- data.frame(avalanche_size = .hist$mids, counts = .hist$counts, perturb_n = rep(p_s))  %>% filter(counts != 0)
+  return(df.plot)
+}, df = ava.per)
+
+p1 <- do.call(rbind, p1.ls) 
+
+
+
+```
+
+
+
+```{r fit_power_law_len, fig.keep="none", cache = TRUE}
+
+
+ava.per <- avalanches <- avalanches %>% 
+  filter(M == 256, steps == 15000)
+
+pert <- unique(ava.per$perturb_n)
+p2.ls <- lapply(pert, function(p_s, df){
+  # p_s <- 5
+  a <- df %>% 
+    filter(perturb_n == p_s) %>% 
+    filter(time != min(time) & ava_length != 0)
+  
+p.l.f <- power.law.fit(a$ava_length)
+  
+  m_m = displ$new(a$ava_length)
+  dd = plot(m_m)
+  dd$perturb_n <- rep(p_s)
+    
+  # m_m = displ$new(a$ava_length)
+  # # m_m = displ$new(moby)
+  # m_m$setXmin(p_s)
+  # m_m$setPars(2)
+  # 
+  # # (est = estimate_pars(m_m))
+  # # (est = estimate_xmin(m_m))
+  # 
+  # 
+  # est <- estimate_xmin(m_m)
+  # m_m$setXmin(est)
+  # 
+  # # m_m$setXmin(2)
+  # est <- estimate_pars(m_m)
+  # m_m$setPars(est)
+  # # plot(m_m)
+  # # lines(m_m, col=2)
+  # # 
+  # dd = plot(m_m)
+  # dd$perturb_n <- rep(p_s)
+  # plot(m_m)
+  # lines(m_m, col=2)
+  # 
+  # dd %>%ggplot(aes(x, y)) +
+  #  geom_point()+
+  # scale_y_log10() +
+  # scale_x_log10() +
+  # stat_smooth(method = "lm")+
+  # facet_wrap(~perturb_n, scales = "free_x")
+  # 
+# bs = bootstrap(m_m, no_of_sims=100, threads=2, xmins = seq(2, 20, 2))
+# 
+#   plot(bs)
+#   bs_p <- bootstrap_p(m_m, threads = 2)
+  
+  # parms <- data.frame(
+  #   "perturb_n" = p_s, 
+  #   "xmin" = m_m$xmin,
+  #   "alpha" = m_m$pars
+  #   # ,
+  #   # "p_value" = bs_p$p
+  #             )
+    
+  parms <- data.frame(
+    "perturb_n" = p_s, 
+    "xmin" = p.l.f$xmin,
+    "alpha" = p.l.f$alpha,
+    "KS" = p.l.f$KS.stat,
+    "KS_p_value" = p.l.f$KS.p
+              )
+  
+  return(list("df.plot"=  dd, "parms.df" = parms))
+}, df = ava.per)
+
+
+p2 <- do.call(rbind, lapply(p2.ls, "[[", 1))
+
+
+model.results <- do.call(rbind, lapply(p2.ls, "[[", 2))
+
+ 
+
+```
+
+
+### This is how a power law should look like in both approaches (drawn from another dataset)
+```{r, fig.keep="none", results="hide"}
+#   geom_point()
+  
+data(moby)
+power.law.fit(moby)
+.hist <- hist(moby, breaks=max(moby) / 10)
+
+
+  m_m = displ$new(moby)
+  # # m_m = displ$new(moby)
+  # m_m$setXmin(2)
+  # m_m$setPars(2)
+  # # 
+  # # (est = estimate_pars(m_m))
+  # # (est = estimate_xmin(m_m))
+  # 
+  # 
+  # est <- estimate_xmin(m_m)
+  # m_m$setXmin(est)
+  # 
+  # # m_m$setXmin(2)
+  # est <- estimate_pars(m_m)
+  # m_m$setPars(est)
+  # plot(m_m)
+  # lines(m_m, col=2)
+  # 
+  
+  dd.plot = 
+    bind_rows(
+    plot(m_m) %>% 
+    mutate(group = rep("CDF")),
+    dd.hist <- data.frame(x = .hist$mids, y = .hist$counts, group = rep("histogram"))  %>% filter(y != 0)
+    )
+    
+  
+  
+  
+```
+
+```{r,  fig.height=3, fig.width=6}
+
+
+
+
+
+  dd.plot %>% ggplot(aes(x, y)) +
+  geom_point() +
+  # stat_smooth(method = "lm") +
+  scale_y_log10() +
+  scale_x_log10() +
+  facet_wrap(~group,scales = "free")
+
+```
+
+
+### Histogram approach
+```{r, fig.height=6, fig.width=12}
+p1 %>% ggplot(aes(avalanche_size, counts)) +
+  geom_point() +
+  # stat_smooth(method = "lm") +
+  scale_y_log10() +
+  scale_x_log10() +
+  facet_wrap(~perturb_n, scales = "free_x", nrow = 2) +
+  xlab("Avalanche length")
+```
+
+### Cumulative distribution function approach
+
+```{r, fig.height=6, fig.width=12}
+
+
+p2 %>%
+  # filter(x > 10) %>%
+  ggplot(aes(x, y)) +
+  geom_point()+
+  scale_y_log10() +
+  scale_x_log10() +
+  # stat_smooth(method = "lm")+
+  facet_wrap(~perturb_n, scales = "free_x", nrow = 2) +
+  xlab("Avalanche length") +
+  ylab("CDF")
+
+```
+
+### Results of the fit
+```{r}
+kable(model.results %>% arrange(perturb_n))
+
+
+```
+
+
+
+# Now repeat the same but filtering the avalanches values where entropy did not change anymore
+
+* From perturb_n 2 remove all the points time > 18000
+* From perturb_n 5 remove all the points time > 7000
+* From perturb_n 10 remove all the points time > 9000
+* From perturb_n 25 remove all the points time > 10000
+
+## Entropy over time
+```{r, fig.height=6, fig.width=12, cache=TRUE}
+
+entropy %>% 
+   filter(
+    !(perturb_n == 2 & time > 18000),
+    !(perturb_n == 5 & time > 7000),
+    !(perturb_n == 10 & time > 9000),
+    !(perturb_n == 25 & time > 10000)
+  ) %>% 
+
+  ggplot(aes(time, entropy)) +
+  geom_line() +
+  facet_wrap(~perturb_n, scales = "free_x", nrow = 2)
+
+```
+
+
+```{r}
+avalanches <- avalanches %>% 
+  group_by(perturb_n) %>% 
+    filter(time != min(time)) %>% 
+  ungroup() %>% 
+  filter(
+    !(perturb_n == 2 & time > 18000),
+    !(perturb_n == 5 & time > 7000),
+    !(perturb_n == 10 & time > 9000),
+    !(perturb_n == 25 & time > 10000)
+  )
+
+```
+
+
+
+## Avalanche size (affected cells) 
+
+```{r, fig.height=6, fig.width=12}
+avalanches %>% ggplot(aes(x = time, y = affected_cells)) +
+  # geom_histogram(binwidth = 3) +
+  geom_point() +
+  facet_wrap(~perturb_n, scales = "free_x", nrow = 2) 
+
+
+# avalanches %>% 
+#   mutate(
+#    bins = cut(affected_cells, breaks = 100)
+# ) %>% 
+#   qplot(bins,  geom = "histogram", fill=I("blue")) +
+#   # facet_wrap(~perturb_n, scales = "free") +
+#   theme(axis.text.x = element_text(angle=90))
+# 
+#   ggplot(aes(x = affected_cells)) +
+#   geom_histogram(binwidth = 50) +
+#   # geom_point() +
+#   facet_wrap(~perturb_n, scales = "free", nrow = 2) 
+```
+
+
+
+```{r, fig.keep="none"}
+ava.per <- avalanches <- avalanches %>% 
+  filter(M == 256, steps == 15000)
+pert <- unique(ava.per$perturb_n)
+p1.ls <- lapply(pert, function(p_s, df){
+  # p_s <- 2
+  a <- df %>% 
+    filter(perturb_n == p_s) %>% 
+    filter(time != min(time)) 
+  # %>% 
+  #   filter(time < 17000)
+  # 
+  a %>% ggplot(aes(time, affected_cells)) +
+    geom_point()
+  
+  x <- a$affected_cells 
+  
+  # data("moby")
+  # x <- moby
+  .hist <- hist(x, breaks=max(x) / 10)
+  # .hist <- hist(x, breaks=180)
+  df.plot <- data.frame(avalanche_size = .hist$mids, counts = .hist$counts, perturb_n = rep(p_s))  %>% filter(counts != 0)
+  
+  # df.plot %>% ggplot(aes(avalanche_size, counts)) +
+  # geom_point() +
+  # # stat_smooth(method = "lm") +
+  # scale_y_log10() +
+  # scale_x_log10() +
+  # facet_wrap(~perturb_n, scales = "free_x")
+  # 
+  return(df.plot)
+}, df = ava.per)
+
+p1 <- do.call(rbind, p1.ls) 
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r, fig.keep="none"}
+
+
+ava.per <- avalanches <- avalanches %>% 
+  filter(M == 256, steps == 15000)
+
+pert <- unique(ava.per$perturb_n)
+p2.ls <- lapply(pert, function(p_s, df){
+  # p_s <- 10
+  a <- df %>% 
+    filter(perturb_n == p_s) %>% 
+    filter(time != min(time) & affected_cells != 0)
+  # %>% 
+#   #   filter(time < 17000)
+#   x <- a$affected_cells
+#   X <- sort(x)
+#   p <- ppoints(100)
+#   df  <- data.frame(x=(1-p),y=(quantile(X,p=p)))
+# fit <- lm(y~x,df)
+# plot(log(quantile(X,p=p)),log(1-p),
+#      ylab="log[P(X > x)]",xlab="log(x)",main="CCDF: log-log")
+# summary(fit)                 
+#                  
+#   (plot(sort(x) , 1-ecdf(x)(sort(x) ), log="xy"))
+#   # a %>% ggplot(aes(time, affected_cells)) +
+#     df %>% ggplot(aes(x, y)) +
+#     geom_point() +
+#       # stat_ecdf() +
+#       stat_smooth(method = "lm") +
+#     scale_y_log10() +
+#   scale_x_log10()
+#   
+  
+  p.l.f <- power.law.fit(a$affected_cells)
+  
+  m_m = displ$new(a$affected_cells)
+  dd = plot(m_m)
+  dd$perturb_n <- rep(p_s)
+  # # m_m = displ$new(moby)
+  # m_m$setXmin(p_s)
+  # m_m$setPars(2)
+  # # 
+  # # (est = estimate_pars(m_m))
+  # # (est = estimate_xmin(m_m))
+  # 
+  # # 
+  # est <- estimate_xmin(m_m)
+  # m_m$setXmin(est)
+  # 
+  # # # m_m$setXmin(2)
+  # (est = estimate_pars(m_m))
+  # m_m$setPars(est)
+  # # plot(m_m)
+  # # lines(m_m, col=2)
+  # # 
+  # # dd = plot(m_m)
+  
+  # plot(m_m)
+  # lines(m_m, col=2)
+
+  # dd %>%ggplot(aes(x, y)) +
+  #  geom_point()+
+  # scale_y_log10() +
+  # scale_x_log10() +
+  # stat_smooth(method = "lm")+
+  # facet_wrap(~perturb_n, scales = "free_x")
+  # 
+# bs = bootstrap(m_m, no_of_sims=100, threads=2, xmins = seq(2, 20, 2))
+# 
+#   plot(bs)
+  # bs_p <- bootstrap_p(m_m, threads = 2)
+  
+  # parms <- data.frame(
+  #   "perturb_n" = p_s, 
+  #   "xmin" = m_m$xmin,
+  #   "alpha" = m_m$pars,
+  #   "p_value" = bs_p$p
+  #             )
+  
+  parms <- data.frame(
+    "perturb_n" = p_s, 
+    "xmin" = p.l.f$xmin,
+    "alpha" = p.l.f$alpha,
+    "KS" = p.l.f$KS.stat,
+    "KS_p_value" = p.l.f$KS.p
+              )
+  return(list("df.plot"=  dd, "parms.df" = parms))
+}, df = ava.per)
+
+
+p2 <- do.call(rbind, lapply(p2.ls, "[[", 1))
+
+
+model.results <- do.call(rbind, lapply(p2.ls, "[[", 2))
+
+ 
+```
+
+
+### This is how a power law should look like in both approaches (drawn from another dataset)
+```{r, fig.keep="none", results="hide"}
+#   geom_point()
+  
+data(moby)
+power.law.fit(moby)
+.hist <- hist(moby, breaks=max(moby) / 10)
+
+
+  m_m = displ$new(moby)
+  # # m_m = displ$new(moby)
+  # m_m$setXmin(2)
+  # m_m$setPars(2)
+  # # 
+  # # (est = estimate_pars(m_m))
+  # # (est = estimate_xmin(m_m))
+  # 
+  # 
+  # est <- estimate_xmin(m_m)
+  # m_m$setXmin(est)
+  # 
+  # # m_m$setXmin(2)
+  # est <- estimate_pars(m_m)
+  # m_m$setPars(est)
+  # plot(m_m)
+  # lines(m_m, col=2)
+  # 
+  
+  dd.plot = 
+    bind_rows(
+    plot(m_m) %>% 
+    mutate(group = rep("CDF")),
+    dd.hist <- data.frame(x = .hist$mids, y = .hist$counts, group = rep("histogram"))  %>% filter(y != 0)
+    )
+    
+  
+  
+  
+```
+
+```{r,  fig.height=3, fig.width=6}
+
+
+
+
+
+  dd.plot %>% ggplot(aes(x, y)) +
+  geom_point() +
+  # stat_smooth(method = "lm") +
+  scale_y_log10() +
+  scale_x_log10() +
+  facet_wrap(~group,scales = "free")
+
+```
+
+### Histogram approach
+```{r, fig.height=6, fig.width=12}
+p1 %>% ggplot(aes(avalanche_size, counts)) +
+  geom_point() +
+  # stat_smooth(method = "lm") +
+  scale_y_log10() +
+  scale_x_log10() +
+  xlab("Affected cells") +
+  facet_wrap(~perturb_n, scales = "free", nrow = 2)
+
+```
+
+### Cumulative distribution function approach
+```{r, fig.height=6, fig.width=12}
+p2 %>%
+  # filter(type == "point") %>%
+  ggplot(aes(x, y)) +
+   geom_point()+
+  scale_y_log10() +
+  scale_x_log10() +
+  facet_wrap(~perturb_n, scales = "free", nrow = 2) +
+  xlab("Affected cells") +
+  ylab("CDF")
+
+```
+### Results of the fit
+```{r}
+kable(model.results %>% arrange(perturb_n))
+```
+
+
+
+## Avalanche length
+
+
+
+
+```{r, fig.height=6, fig.width=12}
+avalanches %>% ggplot(aes(x = time, y = ava_length)) +
+  # geom_histogram(binwidth = 3) +
+  geom_point() +
+  facet_wrap(~perturb_n, scales = "free_x", nrow = 2) 
+```
+
+
+
+
+```{r, fig.keep="none"}
+
+ava.per <- avalanches <- avalanches %>% 
+  filter(M == 256, steps == 15000)
+
+pert <- unique(ava.per$perturb_n)
+p1.ls <- lapply(pert, function(p_s, df){
+  
+  a <- df %>% 
+    filter(perturb_n == p_s) %>% 
+    filter(time != min(time))
+  
+  x <- a$ava_length
+  .hist <- hist(x, breaks=max(x) / 10)
+  df.plot <- data.frame(avalanche_size = .hist$mids, counts = .hist$counts, perturb_n = rep(p_s))  %>% filter(counts != 0)
+  return(df.plot)
+}, df = ava.per)
+
+p1 <- do.call(rbind, p1.ls) 
+
+
+
+```
+
+
+
+
+
+```{r, fig.keep="none", cache = TRUE}
+
+
+ava.per <- avalanches <- avalanches %>% 
+  filter(M == 256, steps == 15000)
+
+pert <- unique(ava.per$perturb_n)
+p2.ls <- lapply(pert, function(p_s, df){
+  # p_s <- 5
+  a <- df %>% 
+    filter(perturb_n == p_s) %>% 
+    filter(time != min(time) & ava_length != 0)
+  
+p.l.f <- power.law.fit(a$ava_length)
+  
+  m_m = displ$new(a$ava_length)
+  dd = plot(m_m)
+  dd$perturb_n <- rep(p_s)
+    
+  # m_m = displ$new(a$ava_length)
+  # # m_m = displ$new(moby)
+  # m_m$setXmin(p_s)
+  # m_m$setPars(2)
+  # 
+  # # (est = estimate_pars(m_m))
+  # # (est = estimate_xmin(m_m))
+  # 
+  # 
+  # est <- estimate_xmin(m_m)
+  # m_m$setXmin(est)
+  # 
+  # # m_m$setXmin(2)
+  # est <- estimate_pars(m_m)
+  # m_m$setPars(est)
+  # # plot(m_m)
+  # # lines(m_m, col=2)
+  # # 
+  # dd = plot(m_m)
+  # dd$perturb_n <- rep(p_s)
+  # plot(m_m)
+  # lines(m_m, col=2)
+  # 
+  # dd %>%ggplot(aes(x, y)) +
+  #  geom_point()+
+  # scale_y_log10() +
+  # scale_x_log10() +
+  # stat_smooth(method = "lm")+
+  # facet_wrap(~perturb_n, scales = "free_x")
+  # 
+# bs = bootstrap(m_m, no_of_sims=100, threads=2, xmins = seq(2, 20, 2))
+# 
+#   plot(bs)
+#   bs_p <- bootstrap_p(m_m, threads = 2)
+  
+  # parms <- data.frame(
+  #   "perturb_n" = p_s, 
+  #   "xmin" = m_m$xmin,
+  #   "alpha" = m_m$pars
+  #   # ,
+  #   # "p_value" = bs_p$p
+  #             )
+    
+  parms <- data.frame(
+    "perturb_n" = p_s, 
+    "xmin" = p.l.f$xmin,
+    "alpha" = p.l.f$alpha,
+    "KS" = p.l.f$KS.stat,
+    "KS_p_value" = p.l.f$KS.p
+              )
+  
+  return(list("df.plot"=  dd, "parms.df" = parms))
+}, df = ava.per)
+
+
+p2 <- do.call(rbind, lapply(p2.ls, "[[", 1))
+
+
+model.results <- do.call(rbind, lapply(p2.ls, "[[", 2))
+
+ 
+
+```
+
+
+### This is how a power law should look like in both approaches (drawn from another dataset)
+```{r, fig.keep="none", results="hide"}
+#   geom_point()
+  
+data(moby)
+power.law.fit(moby)
+.hist <- hist(moby, breaks=max(moby) / 10)
+
+
+  m_m = displ$new(moby)
+  # # m_m = displ$new(moby)
+  # m_m$setXmin(2)
+  # m_m$setPars(2)
+  # # 
+  # # (est = estimate_pars(m_m))
+  # # (est = estimate_xmin(m_m))
+  # 
+  # 
+  # est <- estimate_xmin(m_m)
+  # m_m$setXmin(est)
+  # 
+  # # m_m$setXmin(2)
+  # est <- estimate_pars(m_m)
+  # m_m$setPars(est)
+  # plot(m_m)
+  # lines(m_m, col=2)
+  # 
+  
+  dd.plot = 
+    bind_rows(
+    plot(m_m) %>% 
+    mutate(group = rep("CDF")),
+    dd.hist <- data.frame(x = .hist$mids, y = .hist$counts, group = rep("histogram"))  %>% filter(y != 0)
+    )
+    
+  
+  
+  
+```
+
+```{r,  fig.height=3, fig.width=6}
+
+
+
+
+
+  dd.plot %>% ggplot(aes(x, y)) +
+  geom_point() +
+  # stat_smooth(method = "lm") +
+  scale_y_log10() +
+  scale_x_log10() +
+  facet_wrap(~group,scales = "free")
+
+```
+
+### Histogram approach
+```{r, fig.height=6, fig.width=12}
+p1 %>% ggplot(aes(avalanche_size, counts)) +
+  geom_point() +
+  # stat_smooth(method = "lm") +
+  scale_y_log10() +
+  scale_x_log10() +
+  facet_wrap(~perturb_n, scales = "free_x", nrow = 2) +
+  xlab("Avalanche length")
+```
+
+
+
+### Cumulative distribution function approach
+```{r, fig.height=6, fig.width=12}
+
+
+p2 %>%
+  # filter(x > 10) %>%
+  ggplot(aes(x, y)) +
+  geom_point()+
+  scale_y_log10() +
+  scale_x_log10() +
+  # stat_smooth(method = "lm")+
+  facet_wrap(~perturb_n, scales = "free_x", nrow = 2) +
+  xlab("Avalanche length") +
+  ylab("CDF")
+
+```
+
+
+### Results of the fit
+```{r}
+kable(model.results %>% arrange(perturb_n))
+```
+
