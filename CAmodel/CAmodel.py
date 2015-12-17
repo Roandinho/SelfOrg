@@ -310,15 +310,15 @@ class CAmodel:
         if avalanche:
             type_ = "avalanche"
 
-            name = "output-csv-%s_P-%s-%d_H-%s-%d_N-%d_I-%s_S-%d_M-%d.csv" % (type_, 
-                                                           str(model.perturb_bool),
-                                                           model.perturbimpact,
-                                                           str(model.hierarchy),
-                                                           model.hierarchyRange,
-                                                           model.neighbourhood_level,
-                                                           str(model.updateInteractions),
-                                                           model.steps,
-                                                           int(model.M)
+            name = "output-csv-%s_P-%s-%d_H-%s-%d_N-%d_I-False_S-%d_M-%d.csv" % (type_, 
+                                                           str(self.perturb_bool),
+                                                           self.perturbimpact,
+                                                           str(self.hierarchy),
+                                                           self.hierarchyRange,
+                                                           self.neighbourhood_level,
+                                                           #str(self.updateInteractions),
+                                                           self.steps,
+                                                           int(self.M)
                                                            )
             with open(name, "wb") as f:
                 wr = csv.writer(f, quoting=csv.QUOTE_ALL)
@@ -326,15 +326,15 @@ class CAmodel:
 
         if entropy:
             type_ = "entropy"
-            name = "output-csv-%s_P-%s-%d_H-%s-%d_N-%d_I-%s_S-%d_M-%d.csv" % (type_, 
-                                                           str(model.perturb_bool),
-                                                           model.perturbimpact,
-                                                           str(model.hierarchy),
-                                                           model.hierarchyRange,
-                                                           model.neighbourhood_level,
-                                                           str(model.updateInteractions),
-                                                           model.steps,
-                                                           int(model.M)
+            name = "output-csv-%s_P-%s-%d_H-%s-%d_N-%d_I-False_S-%d_M-%d.csv" % (type_, 
+                                                           str(self.perturb_bool),
+                                                           self.perturbimpact,
+                                                           str(self.hierarchy),
+                                                           self.hierarchyRange,
+                                                           self.neighbourhood_level,
+                                                           #str(self.updateInteractions),
+                                                           self.steps,
+                                                           int(self.M)
                                                            )
             with open(name, "wb") as f:
                 wr = csv.writer(f, quoting=csv.QUOTE_ALL)
