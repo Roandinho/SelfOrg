@@ -7,11 +7,11 @@ M =256  # number of interacting species
 n = 100  # dimensions of (square) 2-D lattice
 steps = 2 # number of steps
 extProbs = dict()  # dictionary containing extinction probablities
-# extProbs[16] = 0.01
-# extProbs[90] = 0.001
+extProbs[0] = 0.01
+extProbs[1] = 0.001
 model = CAmodel.CAmodel(M, n, steps, perturbimpact=10, hierarchy=True,
         replaceExtinct=False, hierarchyRange=5,
-        neighbourhood_level =1, perturb=True, singleRuns=True)
+        neighbourhood_level =1, perturb=True, singleRuns=True, extProbs=extProbs)
 # model.printMatrix()
 model.run()
 # import cProfile
@@ -24,5 +24,6 @@ model.printEntropy()
 #model.printCSV(avalanche=True, entropy=True)
 #print model.single_run_avalance
 #print model.extinctions
+print model.extinct
 # print model.dead
 # model.printEntireMatrix()

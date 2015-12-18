@@ -72,12 +72,8 @@ class Cell:
                 return
         self.nextState = True
 
-    def updateStep(self, forcedExtinct):
+    def updateStep(self):
         """calculate self.nextState"""
-        # if cell is forced to extinct, do this at first
-        if self.Level in forcedExtinct:
-            self.nextState = False
-            return
 
         # a large portion of the cells do not have pred or prey neighbours, do
         # conway immediately

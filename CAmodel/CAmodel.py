@@ -25,6 +25,7 @@ class CAmodel:
         self.hierarchyRange = hierarchyRange
         self.neighbourhood_level = neighbourhood_level
         self.hierarchy = hierarchy
+        self.extinct = []
         self.replaceExtinct = replaceExtinct
         self.withExtinction = False
         self.interactions = None
@@ -141,13 +142,20 @@ class CAmodel:
         forcedExtinct = []
         if self.withExtinction:
             forcedExtinct = self.calcForced()
+            for p in forcedExtinct:
+                self.extinct.append((timestep, p))
+            for cell in self.grid.cells:
+                if cell.Level in forcedExtinct:
+                    cell.nextState = False
+                    cell.State = False
+
 
         # percentage alive
         percAlive = 0
 
         # UPDATE, i.e.: calc next grid and then copy into grid
         for cell in self.grid.cells:
-            cell.updateStep(forcedExtinct)
+            cell.updateStep()
             if cell.State:
                 percAlive += 1
 
